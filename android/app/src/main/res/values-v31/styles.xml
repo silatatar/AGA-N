@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/again_night</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/again_splash_mark</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/again_night</item>
+        <item name="android:postSplashScreenTheme">@style/NormalTheme</item>
+        <item name="android:statusBarColor">@color/again_night</item>
+        <item name="android:navigationBarColor">@color/again_night</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/again_night</item>
+        <item name="android:statusBarColor">@color/again_night</item>
+        <item name="android:navigationBarColor">@color/again_night</item>
+    </style>
+</resources>
