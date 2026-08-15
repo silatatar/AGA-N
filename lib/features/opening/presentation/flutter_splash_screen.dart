@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/again_tokens.dart';
+import '../../startup/startup_decision.dart';
 import 'opening_atmosphere.dart';
 
-class FlutterSplashScreen extends StatefulWidget {
+class FlutterSplashScreen extends ConsumerStatefulWidget {
   const FlutterSplashScreen({
     super.key,
     this.duration = const Duration(milliseconds: 1800),
@@ -15,10 +17,11 @@ class FlutterSplashScreen extends StatefulWidget {
   final Duration duration;
 
   @override
-  State<FlutterSplashScreen> createState() => _FlutterSplashScreenState();
+  ConsumerState<FlutterSplashScreen> createState() =>
+      _FlutterSplashScreenState();
 }
 
-class _FlutterSplashScreenState extends State<FlutterSplashScreen>
+class _FlutterSplashScreenState extends ConsumerState<FlutterSplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   Timer? _timer;
@@ -33,8 +36,19 @@ class _FlutterSplashScreenState extends State<FlutterSplashScreen>
     _timer = Timer(widget.duration, _continue);
   }
 
-  void _continue() {
-    if (mounted) context.goNamed(AppRoutes.humaArrival);
+  Future<void> _continue() async {
+    final destination = await ref
+        .read(startupControllerProvider.notifier)
+        .decide();
+    if (!mounted) return;
+    context.go(switch (destination) {
+      StartupDestination.humaArrival => AppRoutes.humaArrivalPath,
+      StartupDestination.learnerProfiles => AppRoutes.learnerProfilesPath,
+      StartupDestination.profileName => AppRoutes.profileNamePath,
+      StartupDestination.onboarding => AppRoutes.learningGoalPath,
+      StartupDestination.accountDecision => AppRoutes.accountDecisionPath,
+      StartupDestination.home => AppRoutes.homePath,
+    });
   }
 
   @override

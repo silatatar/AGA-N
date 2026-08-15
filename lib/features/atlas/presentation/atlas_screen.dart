@@ -168,12 +168,19 @@ class _WorldCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AgainCard(
     key: ValueKey('atlas-world-${world.slug}'),
-    onTap: () => context.push('/atlas/world/${world.slug}'),
+    onTap: world.state == AtlasDiscoveryState.locked
+        ? null
+        : () => context.push('/atlas/world/${world.slug}'),
     padding: EdgeInsets.zero,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: _WorldArtwork(slug: world.slug, locked: false)),
+        Expanded(
+          child: _WorldArtwork(
+            slug: world.slug,
+            locked: world.state == AtlasDiscoveryState.locked,
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -186,6 +193,8 @@ class _WorldCard extends StatelessWidget {
                   Icon(
                     world.state == AtlasDiscoveryState.discovered
                         ? Icons.check_circle_outline
+                        : world.state == AtlasDiscoveryState.locked
+                        ? Icons.lock_outline
                         : Icons.timelapse,
                     color: world.state == AtlasDiscoveryState.discovered
                         ? AgainColors.emerald200
@@ -197,6 +206,8 @@ class _WorldCard extends StatelessWidget {
                     child: Text(
                       world.state == AtlasDiscoveryState.discovered
                           ? 'Keşfedildi'
+                          : world.state == AtlasDiscoveryState.locked
+                          ? 'Henüz keşfedilmedi'
                           : 'Kısmen keşfedildi',
                     ),
                   ),
@@ -427,7 +438,15 @@ class AtlasWorldDetailScreen extends ConsumerWidget {
                 message: 'Bu Atlas kaydı henüz mevcut değil.',
               );
             }
-            return _WorldDetail(world: matches.first);
+            final world = matches.first;
+            if (world.state == AtlasDiscoveryState.locked) {
+              return const EmptyView(
+                title: 'Bu kayıt henüz kilitli',
+                message:
+                    'Bu dünyayı yolculuğunda keşfettiğinde Atlas kaydı açılacak.',
+              );
+            }
+            return _WorldDetail(world: world);
           },
         ),
       ),

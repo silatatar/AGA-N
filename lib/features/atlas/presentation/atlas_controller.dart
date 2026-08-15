@@ -1,14 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../story/data/story_services.dart';
+import '../../progression/presentation/progression_controller.dart';
 import '../../vocabulary/presentation/vocabulary_controller.dart';
 import '../domain/atlas_models.dart';
 
 final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
-  final story = await ref.read(storyProgressRepositoryProvider).readSnapshot();
+  final progress = await ref.watch(progressionProvider.future);
   final vocabulary = await ref.watch(vocabularyProvider.future);
-  final hasWeatherStory = story.completedChapters.contains('hava-durumu');
-  final hasFirstStory = story.hasFirstSeed;
+  final hasWeatherStory = progress.completedChapterIds.contains('hava-durumu');
+  final hasFirstStory = progress.completedChapterIds.contains(
+    'first-encounter',
+  );
+  final valleyUnlocked = progress.unlockedWorldIds.contains('yasam-vadisi');
+  final forestUnlocked = progress.unlockedWorldIds.contains('sessiz-orman');
+  final seaUnlocked = progress.unlockedWorldIds.contains('deniz-kralligi');
 
   final worlds = [
     AtlasWorld(
@@ -18,8 +23,10 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
           'İlk selamların ve yeni bağların toprağa iz bıraktığı sıcak vadi.',
       state: hasFirstStory
           ? AtlasDiscoveryState.discovered
-          : AtlasDiscoveryState.partial,
-      progress: hasFirstStory ? 1 : .35,
+          : valleyUnlocked
+          ? AtlasDiscoveryState.partial
+          : AtlasDiscoveryState.locked,
+      progress: progress.worldProgress(const ['first-encounter']) / 100,
       discoveredStories: hasFirstStory ? const ['İlk Karşılaşma'] : const [],
       vocabularyThemes: const ['Selamlaşma', 'Tanışma', 'Duygular'],
       culturalNotes: const [
@@ -31,8 +38,10 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
       name: 'Sessiz Orman',
       description:
           'Seslerin, doğanın ve dikkatle dinlemenin yol gösterdiği kadim orman.',
-      state: AtlasDiscoveryState.partial,
-      progress: .2,
+      state: forestUnlocked
+          ? AtlasDiscoveryState.partial
+          : AtlasDiscoveryState.locked,
+      progress: 0,
       discoveredStories: const [],
       vocabularyThemes: const ['Doğa', 'Sesler', 'Basit yönergeler'],
       culturalNotes: const [
@@ -46,8 +55,19 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
           'Limanlar, değişen gökyüzü ve yolculuklarla çevrili mavi krallık.',
       state: hasWeatherStory
           ? AtlasDiscoveryState.discovered
-          : AtlasDiscoveryState.partial,
-      progress: hasWeatherStory ? .34 : .12,
+          : seaUnlocked
+          ? AtlasDiscoveryState.partial
+          : AtlasDiscoveryState.locked,
+      progress:
+          progress.worldProgress(const [
+            'duygular',
+            'hava-durumu',
+            'ulasim-araclari',
+            'yolculuk-hazirligi',
+            'seyahat-plani',
+            'deniz-canlilari',
+          ]) /
+          100,
       discoveredStories: hasWeatherStory ? const ['Hava Durumu'] : const [],
       vocabularyThemes: vocabulary.isEmpty
           ? const ['Duygular', 'Hava durumu', 'Yolculuk']
@@ -98,12 +118,12 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
       ),
       AtlasItem(
         name: 'Mavi Kabuk',
-        isFound: story.completedChapters.length >= 2,
+        isFound: progress.completedChapterIds.length >= 2,
         lore: 'Deniz Krallığı kıyılarından gelen eski bir hatıra.',
       ),
     ],
     discoveredCount: worlds
-        .where((world) => world.state != AtlasDiscoveryState.locked)
+        .where((world) => world.state == AtlasDiscoveryState.discovered)
         .length,
     totalWorldCount: 11,
   );

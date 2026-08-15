@@ -4,7 +4,7 @@ import '../../learner_profile/presentation/learner_profile_controller.dart';
 import '../../learner_profile/presentation/learner_selection_controller.dart';
 import '../../onboarding/domain/onboarding_preferences.dart';
 import '../../onboarding/presentation/onboarding_controller.dart';
-import '../../story/data/story_services.dart';
+import '../../progression/presentation/progression_controller.dart';
 import '../../vocabulary/domain/vocabulary_entry.dart';
 import '../../vocabulary/presentation/vocabulary_controller.dart';
 import '../domain/profile_progress.dart';
@@ -16,7 +16,7 @@ final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
   final learnerType = await ref.watch(learnerSelectionProvider.future);
   final onboarding = await ref.watch(onboardingProvider.future);
   final words = await ref.watch(vocabularyProvider.future);
-  final story = await ref.read(storyProgressRepositoryProvider).readSnapshot();
+  final progress = await ref.watch(progressionProvider.future);
 
   final masteredWords = words
       .where((word) => word.mastery == WordMastery.mastered)
@@ -24,9 +24,8 @@ final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
   final learnedWords = words
       .where((word) => word.mastery != WordMastery.newWord)
       .length;
-  final storyCount = story.completedChapters.length;
-  final streak = story.minutesToday > 0 ? 1 : 0;
-  final growth = story.seedGrowth;
+  final storyCount = progress.completedChapterIds.length;
+  final growth = progress.seedGrowth;
   final milestone = growth < 3
       ? 3
       : growth < 6
@@ -46,28 +45,31 @@ final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
         0.0,
         1.0,
       );
-  final numericLevel = story.totalXp ~/ 200 + 1;
+  final numericLevel = progress.totalXp ~/ 200 + 1;
 
   return ProfileProgress(
     profile: profile,
     learnerType: learnerType,
     levelName: _levelName(onboarding.level),
     numericLevel: numericLevel,
-    totalXp: story.totalXp,
-    xpInLevel: story.totalXp % 200,
+    totalXp: progress.totalXp,
+    xpInLevel: progress.totalXp % 200,
     xpForNextLevel: 200,
     statistics: [
       ProfileStatistic(label: 'Öğrenilen kelime', value: '$learnedWords'),
       ProfileStatistic(
         label: 'Konuşma süresi',
-        value: '${story.speakingMinutes} dk',
+        value: '${progress.speakingMinutes} dk',
       ),
       ProfileStatistic(label: 'Tamamlanan hikâye', value: '$storyCount'),
       ProfileStatistic(
         label: 'Haftalık süre',
-        value: '${story.minutesToday} dk',
+        value: '${progress.weeklyMinutes()} dk',
       ),
-      ProfileStatistic(label: 'Güncel seri', value: '$streak gün'),
+      ProfileStatistic(
+        label: 'Güncel seri',
+        value: '${progress.currentStreak} gün',
+      ),
     ],
     collections: [
       ProfileCollectionItem(
@@ -86,9 +88,9 @@ final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
         isUnlocked: storyCount + masteredWords > 0,
       ),
       ProfileCollectionItem(
-        title: 'Kristaller',
-        count: story.totalXp ~/ 50,
-        isUnlocked: story.totalXp >= 50,
+        title: 'Kaydedilen kelimeler',
+        count: progress.savedWordIds.length,
+        isUnlocked: progress.savedWordIds.isNotEmpty,
       ),
       ProfileCollectionItem(
         title: 'Dünya eserleri',
@@ -98,10 +100,10 @@ final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
     ],
     badges: [
       ProfileBadge(title: 'Hikâye', isUnlocked: storyCount > 0),
-      ProfileBadge(title: 'Konuşma', isUnlocked: story.speakingMinutes > 0),
+      ProfileBadge(title: 'Konuşma', isUnlocked: progress.speakingMinutes > 0),
       ProfileBadge(title: 'Kelime', isUnlocked: learnedWords > 0),
-      ProfileBadge(title: 'İstikrar', isUnlocked: streak > 0),
-      ProfileBadge(title: 'Keşif', isUnlocked: story.hasFirstSeed),
+      ProfileBadge(title: 'İstikrar', isUnlocked: progress.currentStreak > 0),
+      ProfileBadge(title: 'Keşif', isUnlocked: progress.firstSeedEarned),
     ],
     growth: ProfileGrowth(
       points: growth,

@@ -1,4 +1,6 @@
-enum ChapterState { completed, current, available, locked }
+import '../../progression/domain/again_progress.dart';
+
+enum ChapterState { completed, current, available, locked, comingSoon }
 
 class WorldChapter {
   const WorldChapter({
@@ -27,7 +29,12 @@ class WorldChapter {
   final bool isDownloaded;
   final bool isPremium;
 
-  bool get isSelectable => state != ChapterState.locked;
+  bool get hasPlayableContent => id == 'hava-durumu';
+
+  bool get isSelectable =>
+      hasPlayableContent &&
+      state != ChapterState.locked &&
+      state != ChapterState.comingSoon;
 }
 
 const denizKralligiChapters = [
@@ -40,7 +47,7 @@ const denizKralligiChapters = [
     vocabularyCount: 14,
     hasListening: true,
     hasSpeaking: true,
-    state: ChapterState.completed,
+    state: ChapterState.comingSoon,
     isDownloaded: true,
   ),
   WorldChapter(
@@ -63,7 +70,7 @@ const denizKralligiChapters = [
     vocabularyCount: 16,
     hasListening: true,
     hasSpeaking: false,
-    state: ChapterState.available,
+    state: ChapterState.comingSoon,
   ),
   WorldChapter(
     id: 'yolculuk-hazirligi',
@@ -74,7 +81,7 @@ const denizKralligiChapters = [
     vocabularyCount: 20,
     hasListening: true,
     hasSpeaking: true,
-    state: ChapterState.available,
+    state: ChapterState.comingSoon,
   ),
   WorldChapter(
     id: 'seyahat-plani',
@@ -85,7 +92,7 @@ const denizKralligiChapters = [
     vocabularyCount: 22,
     hasListening: true,
     hasSpeaking: true,
-    state: ChapterState.locked,
+    state: ChapterState.comingSoon,
   ),
   WorldChapter(
     id: 'deniz-canlilari',
@@ -96,7 +103,7 @@ const denizKralligiChapters = [
     vocabularyCount: 19,
     hasListening: true,
     hasSpeaking: true,
-    state: ChapterState.locked,
+    state: ChapterState.comingSoon,
   ),
 ];
 
@@ -106,3 +113,28 @@ WorldChapter? denizChapterById(String id) {
   }
   return null;
 }
+
+List<WorldChapter> denizChaptersFrom(AgainProgress progress) => [
+  for (final chapter in denizKralligiChapters)
+    WorldChapter(
+      id: chapter.id,
+      number: chapter.number,
+      title: chapter.title,
+      level: chapter.level,
+      durationMinutes: chapter.durationMinutes,
+      vocabularyCount: chapter.vocabularyCount,
+      hasListening: chapter.hasListening,
+      hasSpeaking: chapter.hasSpeaking,
+      isDownloaded: chapter.isDownloaded,
+      isPremium: chapter.isPremium,
+      state: !chapter.hasPlayableContent
+          ? ChapterState.comingSoon
+          : progress.completedChapterIds.contains(chapter.id)
+          ? ChapterState.completed
+          : progress.currentChapterId == chapter.id
+          ? ChapterState.current
+          : progress.unlockedChapterIds.contains(chapter.id)
+          ? ChapterState.available
+          : ChapterState.locked,
+    ),
+];

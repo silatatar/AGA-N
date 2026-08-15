@@ -6,6 +6,7 @@ import '../../../app/router/app_router.dart';
 import '../../../app/theme/again_tokens.dart';
 import '../../../core/widgets/again_components.dart';
 import '../../opening/presentation/opening_atmosphere.dart';
+import '../../startup/startup_decision.dart';
 import 'auth_controller.dart';
 
 class AccountDecisionScreen extends ConsumerWidget {
@@ -74,7 +75,14 @@ class AccountDecisionScreen extends ConsumerWidget {
                     if (ref.watch(guestModeAllowedProvider))
                       TextButton(
                         key: const Key('continue-guest'),
-                        onPressed: () => context.go(AppRoutes.storyIntroPath),
+                        onPressed: () async {
+                          await ref
+                              .read(startupControllerProvider.notifier)
+                              .continueAsGuest();
+                          if (context.mounted) {
+                            context.go(AppRoutes.storyIntroPath);
+                          }
+                        },
                         child: const Text('Misafir Devam Et'),
                       ),
                   ],

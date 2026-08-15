@@ -12,8 +12,7 @@ import '../../features/home/presentation/home_dashboard_screen.dart';
 import '../../features/learner_profile/presentation/learner_profile_selection_screen.dart';
 import '../../features/learner_profile/presentation/profile_name_setup_screen.dart';
 import '../../features/onboarding/presentation/personalised_onboarding_screen.dart';
-import '../../features/story/presentation/guided_story_intro_screen.dart';
-import '../../features/story/presentation/interactive_story_player_screen.dart';
+import '../../features/story/presentation/data_driven_story_player_screen.dart';
 import '../../features/story_square/presentation/story_square_screen.dart';
 import '../../features/tasks/presentation/daily_tasks_screen.dart';
 import '../../features/world/domain/world_region.dart';
@@ -28,6 +27,7 @@ import '../../features/vocabulary/presentation/word_detail_screen.dart';
 import '../../features/opening/presentation/flutter_splash_screen.dart';
 import '../../features/opening/presentation/huma_arrival_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/progression/presentation/progression_controller.dart';
 
 abstract final class AppRoutes {
   static const designSystem = 'designSystem';
@@ -78,6 +78,8 @@ abstract final class AppRoutes {
   static const emailVerificationPath = '/email-verification';
   static const storyIntro = 'storyIntro';
   static const storyIntroPath = '/story-intro';
+  static const story = 'story';
+  static const storyPath = '/story/:storyId';
   static const worldMap = 'worldMap';
   static const worldMapPath = '/world-map';
   static const worldDetail = 'worldDetail';
@@ -220,7 +222,15 @@ final appRouterProvider = Provider<GoRouter>(
       GoRoute(
         name: AppRoutes.storyIntro,
         path: AppRoutes.storyIntroPath,
-        builder: (context, state) => const GuidedStoryIntroScreen(),
+        builder: (context, state) =>
+            const DataDrivenStoryPlayerScreen(storyId: 'first-encounter'),
+      ),
+      GoRoute(
+        name: AppRoutes.story,
+        path: AppRoutes.storyPath,
+        builder: (context, state) => DataDrivenStoryPlayerScreen(
+          storyId: state.pathParameters['storyId'] ?? '',
+        ),
       ),
       GoRoute(
         name: AppRoutes.worldMap,
@@ -232,13 +242,19 @@ final appRouterProvider = Provider<GoRouter>(
         path: AppRoutes.chapterIntroPath,
         builder: (context, state) {
           final region = regionBySlug(state.pathParameters['slug'] ?? '');
-          final chapter = denizChapterById(
-            state.pathParameters['chapterId'] ?? '',
-          );
+          final chapterId = state.pathParameters['chapterId'] ?? '';
+          final progress = ref.read(progressionProvider).value;
+          final chapter = progress == null
+              ? denizChapterById(chapterId)
+              : denizChaptersFrom(
+                  progress,
+                ).where((c) => c.id == chapterId).firstOrNull;
           return region == null || chapter == null
               ? const NotFoundScreen()
+              : chapter.state == ChapterState.locked
+              ? const NotFoundScreen()
               : chapter.id == 'hava-durumu'
-              ? InteractiveStoryPlayerScreen(region: region, chapter: chapter)
+              ? const DataDrivenStoryPlayerScreen(storyId: 'weather-storm')
               : ChapterIntroPlaceholderScreen(region: region, chapter: chapter);
         },
       ),

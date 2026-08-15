@@ -1,3 +1,5 @@
+import '../../progression/domain/again_progress.dart';
+
 enum WorldRegionState { completed, current, available, locked }
 
 class WorldRegion {
@@ -45,4 +47,33 @@ WorldRegion? regionBySlug(String slug) {
     if (region.slug == slug) return region;
   }
   return null;
+}
+
+List<WorldRegion> worldRegionsFrom(AgainProgress progress) => [
+  _derived(worldRegions[0], progress, const ['first-encounter']),
+  _derived(worldRegions[1], progress, const []),
+  _derived(worldRegions[2], progress, const ['hava-durumu']),
+];
+
+WorldRegion _derived(
+  WorldRegion catalog,
+  AgainProgress progress,
+  List<String> required,
+) {
+  final percent = progress.worldProgress(required) / 100;
+  final unlocked = progress.unlockedWorldIds.contains(catalog.slug);
+  final state = !unlocked
+      ? WorldRegionState.locked
+      : percent == 1
+      ? WorldRegionState.completed
+      : progress.currentWorldId == catalog.slug
+      ? WorldRegionState.current
+      : WorldRegionState.available;
+  return WorldRegion(
+    slug: catalog.slug,
+    title: catalog.title,
+    subtitle: catalog.subtitle,
+    state: state,
+    progress: percent,
+  );
 }

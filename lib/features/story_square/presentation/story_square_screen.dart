@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-import '../../../app/router/app_router.dart';
 import '../../../app/theme/again_tokens.dart';
 import '../../../core/widgets/again_components.dart';
+import '../../../core/widgets/again_navigation.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../learner_profile/domain/learner_type.dart';
 import '../../learner_profile/presentation/learner_selection_controller.dart';
+import '../../huma/application/huma_context_provider.dart';
+import '../../huma/domain/huma_models.dart';
+import '../../huma/presentation/huma_components.dart';
 import '../domain/story_square_models.dart';
 import 'story_square_controller.dart';
 
@@ -109,6 +110,11 @@ class _SquareContent extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
+                  HumaGuideCard(
+                    message: ref.watch(humaMessageProvider(HumaScreen.square)),
+                    compact: true,
+                  ),
+                  const SizedBox(height: 14),
                   if (isChild)
                     const _ChildSafetyBanner()
                   else
@@ -155,7 +161,13 @@ class _SquareContent extends ConsumerWidget {
                   ),
                   const SizedBox(height: 10),
                   ...state.rooms
-                      .where((room) => !isChild || room.isHumaGuided)
+                      .where(
+                        (room) =>
+                            (!isChild || room.isHumaGuided) &&
+                            (isChild ||
+                                state.selectedArea == SquareArea.todayTopic ||
+                                room.area == state.selectedArea),
+                      )
                       .map((room) => _RoomCard(room: room, isChild: isChild)),
                   if (!isChild) ...[
                     const SizedBox(height: 12),
@@ -272,30 +284,12 @@ class _RoomCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              const CircleAvatar(
-                backgroundColor: AgainColors.night700,
-                child: Icon(
-                  Icons.record_voice_over_outlined,
-                  color: AgainColors.turquoise300,
-                ),
-              ),
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: AgainColors.emerald500,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AgainColors.night900, width: 2),
-                  ),
-                ),
-              ),
-            ],
+          const CircleAvatar(
+            backgroundColor: AgainColors.night700,
+            child: Icon(
+              Icons.record_voice_over_outlined,
+              color: AgainColors.turquoise300,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -404,6 +398,7 @@ class _GuidedPracticeSheet extends StatefulWidget {
 
 class _GuidedPracticeSheetState extends State<_GuidedPracticeSheet> {
   String? selected;
+  bool completed = false;
   @override
   Widget build(BuildContext context) => SafeArea(
     child: Padding(
@@ -455,10 +450,20 @@ class _GuidedPracticeSheetState extends State<_GuidedPracticeSheet> {
             ),
           ],
           const SizedBox(height: 16),
-          AgainSecondaryButton(
-            label: 'Provayı Bitir',
-            onPressed: () => Navigator.pop(context),
+          AgainPrimaryButton(
+            key: const Key('complete-guided-practice'),
+            label: completed ? 'Pratik Tamamlandı' : 'Provayı Bitir',
+            onPressed: selected == null || completed
+                ? null
+                : () => setState(() => completed = true),
           ),
+          if (completed) ...[
+            const SizedBox(height: 8),
+            AgainSecondaryButton(
+              label: 'Meydana Dön',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
         ],
       ),
     ),
@@ -468,28 +473,8 @@ class _GuidedPracticeSheetState extends State<_GuidedPracticeSheet> {
 class _SquareBottomNav extends StatelessWidget {
   const _SquareBottomNav();
   @override
-  Widget build(BuildContext context) => NavigationBar(
-    selectedIndex: 2,
-    onDestinationSelected: (index) {
-      if (index == 0) context.go(AppRoutes.homePath);
-      if (index == 1) context.go(AppRoutes.worldMapPath);
-      if (index == 3) context.go(AppRoutes.humaConversationPath);
-      if (index == 4) context.go(AppRoutes.profilePath);
-    },
-    destinations: const [
-      NavigationDestination(
-        icon: Icon(Icons.home_outlined),
-        label: 'Ana Sayfa',
-      ),
-      NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Harita'),
-      NavigationDestination(icon: Icon(Icons.forum_outlined), label: 'Meydan'),
-      NavigationDestination(
-        icon: Icon(Icons.auto_awesome_outlined),
-        label: 'Hüma',
-      ),
-      NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profil'),
-    ],
-  );
+  Widget build(BuildContext context) =>
+      const AgainPrimaryNavigation(selectedIndex: 2);
 }
 
 class _TownSquarePainter extends CustomPainter {

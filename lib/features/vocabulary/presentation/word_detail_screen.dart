@@ -8,6 +8,7 @@ import '../../opening/presentation/opening_atmosphere.dart';
 import '../../story/data/story_services.dart';
 import '../domain/vocabulary_entry.dart';
 import 'vocabulary_controller.dart';
+import 'vocabulary_garden_screen.dart';
 
 class WordDetailScreen extends ConsumerStatefulWidget {
   const WordDetailScreen({super.key, required this.wordId});
@@ -128,6 +129,13 @@ class _WordDetailScreenState extends ConsumerState<WordDetailScreen> {
                                 entry.storyTitle,
                                 style: const TextStyle(color: AgainColors.mist),
                               ),
+                              const SizedBox(height: AgainSpacing.xs),
+                              Text(
+                                'Keşfedildi: ${_date(entry.discoveredAt)}',
+                                style: const TextStyle(
+                                  color: AgainColors.slate,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -148,7 +156,12 @@ class _WordDetailScreenState extends ConsumerState<WordDetailScreen> {
                               ),
                               const SizedBox(height: AgainSpacing.xs),
                               Text(
-                                '${entry.reviewCount} tekrar · ${entry.intervalDays} günlük prototip aralık',
+                                '${growthLabel(entry.growthState)} · ${entry.reviewCount} gerçek tekrar · ${entry.successfulReviewCount} başarılı',
+                              ),
+                              const SizedBox(height: AgainSpacing.xs),
+                              Text(
+                                'Son tekrar: ${entry.lastReviewedAt == null ? 'Henüz yok' : _date(entry.lastReviewedAt!)}\nSıradaki tekrar: ${_date(entry.nextReviewAt)}',
+                                style: const TextStyle(color: AgainColors.mist),
                               ),
                               Material(
                                 color: Colors.transparent,
@@ -191,7 +204,11 @@ class _WordDetailScreenState extends ConsumerState<WordDetailScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: AgainSpacing.sm),
-                        for (final mode in ReviewMode.values)
+                        for (final mode in const [
+                          ReviewMode.meaningRecall,
+                          ReviewMode.matching,
+                          ReviewMode.sentenceCompletion,
+                        ])
                           Padding(
                             padding: const EdgeInsets.only(
                               bottom: AgainSpacing.sm,
@@ -203,6 +220,11 @@ class _WordDetailScreenState extends ConsumerState<WordDetailScreen> {
                               ),
                             ),
                           ),
+                        const SizedBox(height: AgainSpacing.md),
+                        AgainSecondaryButton(
+                          label: 'Bahçeden Kaldır',
+                          onPressed: () => _confirmRemove(context, ref, entry),
+                        ),
                       ],
                     ),
                   ),
@@ -214,6 +236,37 @@ class _WordDetailScreenState extends ConsumerState<WordDetailScreen> {
       ),
     );
   }
+}
+
+String _date(DateTime value) => '${value.day}.${value.month}.${value.year}';
+
+Future<void> _confirmRemove(
+  BuildContext context,
+  WidgetRef ref,
+  VocabularyEntry entry,
+) async {
+  final remove = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Kelime bahçeden kaldırılsın mı?'),
+      content: Text(
+        '${entry.word} ve inceleme geçmişi bu cihazdan kaldırılacak.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Vazgeç'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Kaldır'),
+        ),
+      ],
+    ),
+  );
+  if (remove != true || !context.mounted) return;
+  await ref.read(vocabularyProvider.notifier).removeWord(entry.id);
+  if (context.mounted) context.go('/vocabulary');
 }
 
 class _DetailBlock extends StatelessWidget {

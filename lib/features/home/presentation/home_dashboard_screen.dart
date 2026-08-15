@@ -5,59 +5,328 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/again_tokens.dart';
 import '../../../core/widgets/again_components.dart';
+import '../../../core/widgets/again_navigation.dart';
+import '../../../core/widgets/state_views.dart';
 import '../../learner_profile/domain/learner_type.dart';
 import '../../learner_profile/presentation/learner_profile_controller.dart';
 import '../../learner_profile/presentation/learner_selection_controller.dart';
+import '../../onboarding/domain/onboarding_preferences.dart';
 import '../../onboarding/presentation/onboarding_controller.dart';
-import '../../opening/presentation/opening_atmosphere.dart';
-import '../../story/data/story_services.dart';
+import '../../progression/domain/again_progress.dart';
+import '../../progression/presentation/progression_controller.dart';
+import '../../vocabulary/domain/vocabulary_entry.dart';
+import '../../vocabulary/presentation/vocabulary_controller.dart';
 
-final homeStoryProgressProvider =
-    FutureProvider.autoDispose<StoryProgressSnapshot>(
-      (ref) => ref.read(storyProgressRepositoryProvider).readSnapshot(),
+enum HomeRecommendationKind {
+  continueStory,
+  reviewWords,
+  dailyGoal,
+  exploreMap,
+}
+
+class HomeRecommendation {
+  const HomeRecommendation({
+    required this.kind,
+    required this.message,
+    required this.label,
+    required this.route,
+  });
+  final HomeRecommendationKind kind;
+  final String message, label, route;
+}
+
+HomeRecommendation homeRecommendation({
+  required AgainProgress progress,
+  required int dueWords,
+  required int goal,
+}) {
+  if (progress.currentChapterId == 'hava-durumu' &&
+      !progress.completedChapterIds.contains('hava-durumu')) {
+    return const HomeRecommendation(
+      kind: HomeRecommendationKind.continueStory,
+      message: 'Hava Durumu hikâyemize kaldığımız yerden devam edebiliriz.',
+      label: 'Devam Et',
+      route: '/world/deniz-kralligi/chapter/hava-durumu',
     );
+  }
+  if (dueWords > 0) {
+    return HomeRecommendation(
+      kind: HomeRecommendationKind.reviewWords,
+      message: 'Bugün $dueWords kelime seni tekrar bekliyor.',
+      label: 'Tekrar Et',
+      route: AppRoutes.vocabularyGardenPath,
+    );
+  }
+  final minutes = progress.activityFor(DateTime.now()).learningMinutes;
+  if (minutes < goal) {
+    return HomeRecommendation(
+      kind: HomeRecommendationKind.dailyGoal,
+      message: 'Bugünkü hedefinin ${goal - minutes} dakikası kaldı.',
+      label: 'Yolculuğa Başla',
+      route: AppRoutes.worldMapPath,
+    );
+  }
+  return const HomeRecommendation(
+    kind: HomeRecommendationKind.exploreMap,
+    message: 'Yeni bir yol seni bekliyor.',
+    label: 'Haritayı Aç',
+    route: AppRoutes.worldMapPath,
+  );
+}
 
 class HomeDashboardScreen extends ConsumerWidget {
   const HomeDashboardScreen({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(learnerProfileProvider).value;
-    final learnerType = ref.watch(learnerSelectionProvider).value;
-    final preferences = ref.watch(onboardingProvider).value;
-    final storyState = ref.watch(homeStoryProgressProvider);
-    final name = profile?.displayName ?? 'Gezgin';
-    final dailyGoal = preferences?.dailyMinutes ?? 15;
+    final profile = ref.watch(learnerProfileProvider);
+    final learner = ref.watch(learnerSelectionProvider);
+    final onboarding = ref.watch(onboardingProvider);
+    final progress = ref.watch(progressionProvider);
+    final vocabulary = ref.watch(vocabularyProvider);
+    if (profile.isLoading ||
+        learner.isLoading ||
+        onboarding.isLoading ||
+        progress.isLoading ||
+        vocabulary.isLoading) {
+      return const Scaffold(
+        backgroundColor: AgainColors.night950,
+        body: LoadingView(message: 'Dünyan hazırlanıyor…'),
+      );
+    }
+    if (profile.hasError ||
+        learner.hasError ||
+        onboarding.hasError ||
+        progress.hasError ||
+        vocabulary.hasError) {
+      return Scaffold(
+        backgroundColor: AgainColors.night950,
+        body: ErrorView(
+          title: 'Yolculuk kısa bir mola verdi',
+          message: 'Dünyana bağlanırken küçük bir sorun oluştu.',
+          onRetry: () {
+            ref.invalidate(learnerProfileProvider);
+            ref.invalidate(learnerSelectionProvider);
+            ref.invalidate(onboardingProvider);
+            ref.invalidate(progressionProvider);
+            ref.invalidate(vocabularyProvider);
+          },
+        ),
+      );
+    }
+    return _LivingHome(
+      name: profile.value?.displayName ?? 'Gezgin',
+      learnerType: learner.value,
+      preferences: onboarding.value ?? const OnboardingPreferences(),
+      progress: progress.value ?? const AgainProgress(),
+      words: vocabulary.value ?? const [],
+    );
+  }
+}
 
+class _LivingHome extends StatelessWidget {
+  const _LivingHome({
+    required this.name,
+    required this.learnerType,
+    required this.preferences,
+    required this.progress,
+    required this.words,
+  });
+  final String name;
+  final LearnerType? learnerType;
+  final OnboardingPreferences preferences;
+  final AgainProgress progress;
+  final List<VocabularyEntry> words;
+
+  @override
+  Widget build(BuildContext context) {
+    final due = words.where((word) => word.isDue).length;
+    final goal = preferences.dailyMinutes ?? 15;
+    final recommendation = homeRecommendation(
+      progress: progress,
+      dueWords: due,
+      goal: goal,
+    );
+    final child = learnerType == LearnerType.child;
     return Scaffold(
       backgroundColor: AgainColors.night950,
-      body: Stack(
-        children: [
-          OpeningAtmosphere(
-            child: SafeArea(
-              bottom: false,
-              child: storyState.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, _) => Center(
-                  child: AgainSecondaryButton(
-                    label: 'Tekrar dene',
-                    onPressed: () => ref.invalidate(homeStoryProgressProvider),
-                  ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 920;
+          final content = _HomeContent(
+            name: name,
+            learnerType: learnerType,
+            preferences: preferences,
+            progress: progress,
+            words: words,
+            recommendation: recommendation,
+            child: child,
+            wide: wide,
+          );
+          if (!wide) {
+            return Stack(
+              children: [
+                content,
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _HomeNavigation(),
                 ),
-                data: (story) => _DashboardContent(
-                  name: name,
-                  learnerType: learnerType,
-                  dailyGoal: dailyGoal,
-                  story: story,
-                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              const SafeArea(child: _HomeRail()),
+              Expanded(child: content),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HomeContent extends StatelessWidget {
+  const _HomeContent({
+    required this.name,
+    required this.learnerType,
+    required this.preferences,
+    required this.progress,
+    required this.words,
+    required this.recommendation,
+    required this.child,
+    required this.wide,
+  });
+  final String name;
+  final LearnerType? learnerType;
+  final OnboardingPreferences preferences;
+  final AgainProgress progress;
+  final List<VocabularyEntry> words;
+  final HomeRecommendation recommendation;
+  final bool child, wide;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = progress.activityFor(DateTime.now());
+    final due = words.where((word) => word.isDue).length;
+    return SingleChildScrollView(
+      key: const Key('home-scroll'),
+      padding: EdgeInsets.fromLTRB(
+        wide ? 30 : 16,
+        20,
+        wide ? 30 : 16,
+        wide ? 34 : 108,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1220),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Greeting(
+                name: name,
+                level: _level(preferences.level),
+                xp: progress.totalXp,
               ),
+              const SizedBox(height: 18),
+              _JourneyHero(
+                progress: progress,
+                recommendation: recommendation,
+                child: child,
+              ),
+              const SizedBox(height: 18),
+              _HumaGuide(recommendation: recommendation, child: child),
+              const SizedBox(height: 18),
+              if (wide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _DailyGoal(
+                            minutes: today.learningMinutes,
+                            goal: preferences.dailyMinutes ?? 15,
+                          ),
+                          const SizedBox(height: 16),
+                          _SeedGrowth(growth: progress.seedGrowth),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _TasksPreview(progress: progress),
+                          const SizedBox(height: 16),
+                          _VocabularyReview(due: due),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              else ...[
+                _DailyGoal(
+                  minutes: today.learningMinutes,
+                  goal: preferences.dailyMinutes ?? 15,
+                ),
+                const SizedBox(height: 14),
+                _SeedGrowth(growth: progress.seedGrowth),
+                const SizedBox(height: 14),
+                _TasksPreview(progress: progress),
+                const SizedBox(height: 14),
+                _VocabularyReview(due: due),
+              ],
+              const SizedBox(height: 16),
+              _Discovery(
+                interests: preferences.interests,
+                learnerType: learnerType,
+                progress: progress,
+              ),
+              const SizedBox(height: 16),
+              _Weekly(progress: progress),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Greeting extends StatelessWidget {
+  const _Greeting({required this.name, required this.level, required this.xp});
+  final String name, level;
+  final int xp;
+  @override
+  Widget build(BuildContext context) {
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Günaydın'
+        : hour < 18
+        ? 'İyi günler'
+        : 'İyi akşamlar';
+    return Semantics(
+      header: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$greeting, $name.',
+            key: const Key('home-greeting'),
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+              color: AgainColors.gold400,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _HomeBottomNav(),
+          const SizedBox(height: 4),
+          Text(
+            '$level • $xp XP',
+            key: const Key('home-level-xp'),
+            style: const TextStyle(
+              color: AgainColors.turquoise100,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -65,160 +334,126 @@ class HomeDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _DashboardContent extends StatelessWidget {
-  const _DashboardContent({
-    required this.name,
-    required this.learnerType,
-    required this.dailyGoal,
-    required this.story,
+class _JourneyHero extends StatelessWidget {
+  const _JourneyHero({
+    required this.progress,
+    required this.recommendation,
+    required this.child,
   });
-  final String name;
-  final LearnerType? learnerType;
-  final int dailyGoal;
-  final StoryProgressSnapshot story;
-
-  bool get _child => learnerType == LearnerType.child;
-  bool get _weatherCompleted => story.completedChapters.contains('hava-durumu');
-
+  final AgainProgress progress;
+  final HomeRecommendation recommendation;
+  final bool child;
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final desktop = constraints.maxWidth >= 920;
-      final cards = <Widget>[
-        _HumaGuidanceCard(
-          text: _weatherCompleted ? _completedGuidance : _guidance,
-          largeAction: _child,
-        ),
-        _DailyGoalCard(
-          minutes: story.minutesToday,
-          goal: dailyGoal,
-          large: _child,
-        ),
-        _ContinueStoryCard(completed: _weatherCompleted, large: _child),
-        _SeedGrowthCard(growth: story.seedGrowth, xp: story.totalXp),
-        _TodayTasksCard(story: story, concise: _child),
-        _VocabularyCard(words: story.savedWords, concise: _child),
-        const _RecommendedStoryCard(),
-        _WeeklyProgressCard(minutesToday: story.minutesToday, goal: dailyGoal),
-      ];
-      return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(
-          AgainSpacing.lg,
-          AgainSpacing.lg,
-          AgainSpacing.lg,
-          110,
-        ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1180),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+  Widget build(BuildContext context) {
+    final active = recommendation.kind == HomeRecommendationKind.continueStory;
+    final completed = progress.completedChapterIds.contains('hava-durumu');
+    final value = completed
+        ? 1.0
+        : active
+        ? .45
+        : 0.0;
+    return Semantics(
+      button: true,
+      label:
+          '${active ? 'Deniz Krallığı, Hava Durumu' : 'Yeni Bir Yolculuk Seç'}. Yüzde ${(value * 100).round()} tamamlandı.',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: SizedBox(
+          height: child ? 310 : 280,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/images/worlds/deniz_kralligi/hero_background.webp',
+                fit: BoxFit.cover,
+                cacheWidth: 1280,
+              ),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0xF0041020)],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _greeting,
-                            key: const Key('home-greeting'),
-                            style: Theme.of(context).textTheme.headlineLarge
-                                ?.copyWith(color: AgainColors.gold400),
-                          ),
-                          Text(
-                            _subtitle,
-                            style: const TextStyle(color: AgainColors.mist),
-                          ),
-                        ],
+                    Text(
+                      active ? 'DENİZ KRALLIĞI' : 'YENİ BİR YOLCULUK',
+                      style: const TextStyle(
+                        color: AgainColors.gold400,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.3,
                       ),
                     ),
-                    const HumaAvatar(size: 62),
+                    Text(
+                      active ? 'Hava Durumu' : 'Haritada dünyanı seç',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: value,
+                      minHeight: 5,
+                      color: AgainColors.turquoise300,
+                      backgroundColor: AgainColors.night700,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: 210,
+                      child: AgainPrimaryButton(
+                        key: const Key('home-continue-story'),
+                        label: recommendation.label,
+                        icon: Icons.arrow_forward_rounded,
+                        onPressed: () => context.push(recommendation.route),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: AgainSpacing.xl),
-                if (desktop)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: AgainSpacing.md,
-                          mainAxisSpacing: AgainSpacing.md,
-                          mainAxisExtent: 330,
-                        ),
-                    itemCount: cards.length,
-                    itemBuilder: (_, index) => cards[index],
-                  )
-                else
-                  ...cards.expand(
-                    (card) => [
-                      SizedBox(height: 370, child: card),
-                      const SizedBox(height: AgainSpacing.md),
-                    ],
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
-    },
-  );
-
-  String get _greeting {
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Günaydın'
-        : hour < 18
-        ? 'Merhaba'
-        : 'İyi akşamlar';
-    return '$greeting, $name.';
+      ),
+    );
   }
-
-  String get _subtitle => switch (learnerType) {
-    LearnerType.child => 'Bugün küçük bir keşfe çıkalım!',
-    LearnerType.teen => 'Yeni bir hikâyenin kilidini açmaya hazır mısın?',
-    LearnerType.adult => 'Bugünkü öğrenme planın hazır.',
-    null => 'Yolculuğuna kaldığın yerden devam et.',
-  };
-
-  String get _guidance => switch (learnerType) {
-    LearnerType.child => 'Deniz Krallığı’nda havayı keşfedelim.',
-    LearnerType.teen =>
-      'Deniz Krallığı’nda fırtına yaklaşıyor. Hikâyeye katıl!',
-    _ => 'Bugün Deniz Krallığı’nda hava durumunu öğrenebiliriz.',
-  };
-
-  String get _completedGuidance => switch (learnerType) {
-    LearnerType.child => 'Harika! Tohumuna yeni bir yaprak ekledin.',
-    LearnerType.teen => 'Hava Durumu tamam! Sıradaki rota seni bekliyor.',
-    _ =>
-      'Hava Durumu bölümünü tamamladın. Kelimelerini kısa bir tekrar güçlendirir.',
-  };
 }
 
-class _HumaGuidanceCard extends StatelessWidget {
-  const _HumaGuidanceCard({required this.text, required this.largeAction});
-  final String text;
-  final bool largeAction;
+class _HumaGuide extends StatelessWidget {
+  const _HumaGuide({required this.recommendation, required this.child});
+  final HomeRecommendation recommendation;
+  final bool child;
   @override
   Widget build(BuildContext context) => AgainCard(
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        HumaAvatar(size: largeAction ? 78 : 62),
-        const SizedBox(width: AgainSpacing.md),
+        HumaAvatar(size: child ? 78 : 64),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Hüma’dan bir not',
-                style: Theme.of(context).textTheme.titleMedium,
+              const Text(
+                'Hüma',
+                style: TextStyle(
+                  color: AgainColors.gold400,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-              const SizedBox(height: AgainSpacing.xs),
-              Text(text),
+              const SizedBox(height: 5),
+              Text(
+                recommendation.message,
+                style: TextStyle(fontSize: child ? 17 : 15, height: 1.4),
+              ),
             ],
           ),
         ),
@@ -227,46 +462,296 @@ class _HumaGuidanceCard extends StatelessWidget {
   );
 }
 
-class _DailyGoalCard extends StatelessWidget {
-  const _DailyGoalCard({
-    required this.minutes,
-    required this.goal,
-    required this.large,
-  });
-  final int minutes;
-  final int goal;
-  final bool large;
+class _DailyGoal extends StatelessWidget {
+  const _DailyGoal({required this.minutes, required this.goal});
+  final int minutes, goal;
   @override
   Widget build(BuildContext context) {
-    final progress = goal == 0 ? 0.0 : (minutes / goal).clamp(0.0, 1.0);
+    final value = goal <= 0 ? 0.0 : (minutes / goal).clamp(0.0, 1.0);
+    return Semantics(
+      label: 'Bugünkü hedef. $minutes dakika tamamlandı, hedef $goal dakika.',
+      child: AgainCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Title(Icons.route_rounded, 'Bugünkü Yolculuk'),
+            const SizedBox(height: 16),
+            Text(
+              '$minutes / $goal dakika',
+              key: const Key('home-daily-goal'),
+              style: const TextStyle(
+                fontSize: 25,
+                color: AgainColors.turquoise100,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: value,
+              minHeight: 9,
+              borderRadius: BorderRadius.circular(99),
+              color: value >= 1
+                  ? AgainColors.emerald200
+                  : AgainColors.turquoise300,
+              backgroundColor: AgainColors.night700,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value >= 1
+                  ? 'Bugünkü hedefini tamamladın.'
+                  : 'Her dakika dünyanda bir iz bırakır.',
+              style: const TextStyle(color: AgainColors.mist),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SeedGrowth extends StatelessWidget {
+  const _SeedGrowth({required this.growth});
+
+  final int growth;
+
+  @override
+  Widget build(BuildContext context) {
+    final stage = _growth(growth);
     return AgainCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SectionTitle(icon: Icons.today_rounded, title: 'Günlük hedef'),
-          const Spacer(),
-          Text(
-            '$minutes / $goal dakika',
-            key: const Key('home-daily-goal'),
-            style: TextStyle(
-              fontSize: large ? 30 : 25,
-              fontWeight: FontWeight.w900,
-              color: AgainColors.turquoise100,
+          const _Title(Icons.auto_awesome_rounded, 'Tohum Vadisi'),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              CustomPaint(
+                size: const Size(82, 90),
+                painter: _PlantPainter(stage.index),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stage.label,
+                      key: const Key('home-seed-growth'),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AgainColors.emerald200,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      stage.next,
+                      style: const TextStyle(color: AgainColors.mist),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TasksPreview extends StatelessWidget {
+  const _TasksPreview({required this.progress});
+  final AgainProgress progress;
+  @override
+  Widget build(BuildContext context) {
+    final today = progress.activityFor(DateTime.now());
+    final tasks = [
+      ('Hikâye bölümü tamamla', today.storyCount, 1),
+      ('Kelime tekrarı yap', today.vocabularyReviews, 1),
+      ('Konuşma pratiği', today.speakingMinutes, 2),
+    ];
+    return AgainCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _Title(Icons.task_alt_rounded, 'Bugünün Görevleri'),
+          const SizedBox(height: 10),
+          for (final task in tasks)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                children: [
+                  Icon(
+                    task.$2 >= task.$3
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    color: task.$2 >= task.$3
+                        ? AgainColors.emerald200
+                        : AgainColors.slate,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(task.$1)),
+                  Text('${task.$2.clamp(0, task.$3)}/${task.$3}'),
+                ],
+              ),
+            ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              key: const Key('open-daily-tasks'),
+              onPressed: () => context.push(AppRoutes.dailyTasksPath),
+              child: const Text('Tüm Görevleri Gör'),
             ),
           ),
-          const SizedBox(height: AgainSpacing.sm),
-          LinearProgressIndicator(
-            value: progress,
-            minHeight: large ? 12 : 8,
-            borderRadius: BorderRadius.circular(99),
-            backgroundColor: AgainColors.night700,
-            color: AgainColors.emerald200,
+        ],
+      ),
+    );
+  }
+}
+
+class _VocabularyReview extends StatelessWidget {
+  const _VocabularyReview({required this.due});
+  final int due;
+  @override
+  Widget build(BuildContext context) => AgainCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Title(Icons.local_florist_outlined, 'Kelime Bahçesi'),
+        const SizedBox(height: 12),
+        Text(
+          due > 0
+              ? 'Bugün $due kelime tekrar edilmeyi bekliyor.'
+              : 'Bugünlük tüm kelimelerin taze.',
+          style: const TextStyle(height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        AgainSecondaryButton(
+          key: const Key('open-vocabulary-garden'),
+          label: due > 0 ? 'Tekrar Et' : 'Bahçeyi Aç',
+          onPressed: () => context.push(AppRoutes.vocabularyGardenPath),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Discovery extends StatelessWidget {
+  const _Discovery({
+    required this.interests,
+    required this.learnerType,
+    required this.progress,
+  });
+  final Set<String> interests;
+  final LearnerType? learnerType;
+  final AgainProgress progress;
+  @override
+  Widget build(BuildContext context) {
+    final text = interests.isNotEmpty
+        ? '${interests.first} ilgine uygun yeni dünyalar Atlas’ta seni bekliyor.'
+        : learnerType == LearnerType.adult
+        ? 'Seyahat İngilizcesi için Deniz Krallığı rotasını güçlendir.'
+        : 'Haritada yeni bir keşif rotası seç.';
+    return AgainCard(
+      child: Row(
+        children: [
+          const Icon(
+            Icons.explore_rounded,
+            color: AgainColors.gold400,
+            size: 34,
           ),
-          const SizedBox(height: AgainSpacing.xs),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Senin için',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                Text(text, style: const TextStyle(color: AgainColors.mist)),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Haritayı aç',
+            onPressed: () => context.push(AppRoutes.worldMapPath),
+            icon: const Icon(Icons.arrow_forward_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Weekly extends StatelessWidget {
+  const _Weekly({required this.progress});
+  final AgainProgress progress;
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final days = List.generate(
+      7,
+      (i) => DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: 6 - i)),
+    );
+    final minutes = [
+      for (final day in days) progress.activityFor(day).learningMinutes,
+    ];
+    final maxValue = minutes.fold<int>(1, (a, b) => b > a ? b : a);
+    final total = minutes.fold<int>(0, (a, b) => a + b);
+    return AgainCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: _Title(Icons.insights_rounded, 'Bu Haftanın İzleri'),
+              ),
+              if (progress.currentStreak > 0)
+                Text(
+                  '${progress.currentStreak} günlük seri',
+                  style: const TextStyle(color: AgainColors.gold400),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 100,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (var i = 0; i < 7; i++)
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Container(
+                          width: 18,
+                          height: 8 + 60 * minutes[i] / maxValue,
+                          decoration: BoxDecoration(
+                            color: minutes[i] > 0
+                                ? AgainColors.turquoise300
+                                : AgainColors.night700,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${days[i].day}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Text(
-            progress >= 1
-                ? 'Bugünkü hedef tamamlandı.'
-                : 'Her dakika ilerlemene katkı sağlar.',
+            'Bu hafta $total dakika öğrendin.',
+            key: const Key('home-weekly-minutes'),
             style: const TextStyle(color: AgainColors.mist),
           ),
         ],
@@ -275,337 +760,182 @@ class _DailyGoalCard extends StatelessWidget {
   }
 }
 
-class _ContinueStoryCard extends StatelessWidget {
-  const _ContinueStoryCard({required this.completed, required this.large});
-  final bool completed;
-  final bool large;
-  @override
-  Widget build(BuildContext context) => AgainCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _SectionTitle(
-          icon: Icons.auto_stories_rounded,
-          title: 'Hikâyeye devam et',
-        ),
-        const Spacer(),
-        Text(
-          'Deniz Krallığı — Hava Durumu',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: AgainSpacing.xs),
-        Text(
-          completed ? 'Tamamlandı · Tekrar edebilirsin' : 'Fırtına Öncesi',
-          style: const TextStyle(color: AgainColors.mist),
-        ),
-        const SizedBox(height: AgainSpacing.md),
-        AgainPrimaryButton(
-          key: const Key('home-continue-story'),
-          label: completed ? 'Tekrar Et' : 'Devam Et',
-          icon: Icons.play_arrow_rounded,
-          onPressed: () =>
-              context.push('/world/deniz-kralligi/chapter/hava-durumu'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _SeedGrowthCard extends StatelessWidget {
-  const _SeedGrowthCard({required this.growth, required this.xp});
-  final int growth;
-  final int xp;
-  @override
-  Widget build(BuildContext context) => AgainCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _SectionTitle(icon: Icons.spa_rounded, title: 'Tohum Vadisi'),
-        const Spacer(),
-        Row(
-          children: [
-            const Icon(
-              Icons.park_rounded,
-              size: 66,
-              color: AgainColors.emerald200,
-            ),
-            const SizedBox(width: AgainSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$growth büyüme izi',
-                    key: const Key('home-seed-growth'),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  Text(
-                    '$xp XP ile besleniyor',
-                    style: const TextStyle(color: AgainColors.mist),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-class _TodayTasksCard extends StatelessWidget {
-  const _TodayTasksCard({required this.story, required this.concise});
-  final StoryProgressSnapshot story;
-  final bool concise;
-  @override
-  Widget build(BuildContext context) {
-    final tasks = [
-      ('Bir cümle dinle', story.minutesToday > 0),
-      ('Bir kelime kaydet', story.savedWords.isNotEmpty),
-      ('Hava Durumu hikâyesi', story.completedChapters.contains('hava-durumu')),
-    ];
-    return AgainCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const _SectionTitle(
-            icon: Icons.task_alt_rounded,
-            title: 'Bugünün görevleri',
-          ),
-          const SizedBox(height: AgainSpacing.sm),
-          for (final task in tasks)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AgainSpacing.xs),
-              child: Row(
-                children: [
-                  Icon(
-                    task.$2 ? Icons.check_circle : Icons.circle_outlined,
-                    color: task.$2 ? AgainColors.emerald200 : AgainColors.slate,
-                  ),
-                  const SizedBox(width: AgainSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      concise ? task.$1.split(' ').take(3).join(' ') : task.$1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const Spacer(),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              key: const Key('open-daily-tasks'),
-              onPressed: () => context.push(AppRoutes.dailyTasksPath),
-              child: const Text('Tüm görevleri gör'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VocabularyCard extends StatelessWidget {
-  const _VocabularyCard({required this.words, required this.concise});
-  final Set<String> words;
-  final bool concise;
-  @override
-  Widget build(BuildContext context) => AgainCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _SectionTitle(
-          icon: Icons.bookmarks_outlined,
-          title: 'Kelime tekrarı',
-        ),
-        const SizedBox(height: AgainSpacing.md),
-        if (words.isEmpty)
-          const Text(
-            'Henüz kelime kaydetmedin. Hikâyede bir kelimeye dokunabilirsin.',
-            style: TextStyle(color: AgainColors.mist),
-          )
-        else ...[
-          Wrap(
-            spacing: AgainSpacing.xs,
-            runSpacing: AgainSpacing.xs,
-            children: words
-                .take(concise ? 3 : 6)
-                .map((word) => Chip(label: Text(word)))
-                .toList(),
-          ),
-          const Spacer(),
-          Text('${words.length} kelime tekrar için hazır.'),
-        ],
-        const Spacer(),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            key: const Key('open-vocabulary-garden'),
-            onPressed: () => context.push(AppRoutes.vocabularyGardenPath),
-            child: const Text('Kelime Bahçesi’ni Aç'),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _RecommendedStoryCard extends StatelessWidget {
-  const _RecommendedStoryCard();
-  @override
-  Widget build(BuildContext context) => AgainCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _SectionTitle(
-          icon: Icons.explore_outlined,
-          title: 'Önerilen hikâye',
-        ),
-        const Spacer(),
-        Text('Ulaşım Araçları', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: AgainSpacing.xs),
-        const Text(
-          'Deniz Krallığı · 14 dakika · 16 kelime',
-          style: TextStyle(color: AgainColors.mist),
-        ),
-        const SizedBox(height: AgainSpacing.md),
-        AgainSecondaryButton(
-          label: 'Bölümü Gör',
-          onPressed: () => context.push('/world/deniz-kralligi'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _WeeklyProgressCard extends StatelessWidget {
-  const _WeeklyProgressCard({required this.minutesToday, required this.goal});
-  final int minutesToday;
-  final int goal;
-  @override
-  Widget build(BuildContext context) {
-    final today = DateTime.now().weekday - 1;
-    return AgainCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const _SectionTitle(
-            icon: Icons.bar_chart_rounded,
-            title: 'Haftalık ilerleme',
-          ),
-          const Spacer(),
-          SizedBox(
-            height: 104,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(7, (index) {
-                final minutes = index == today ? minutesToday : 0;
-                final height = goal == 0
-                    ? 8.0
-                    : 8 + 62 * (minutes / goal).clamp(0.0, 1.0);
-                return Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      AnimatedContainer(
-                        duration: AgainDurations.micro,
-                        width: 18,
-                        height: height,
-                        decoration: BoxDecoration(
-                          color: index == today
-                              ? AgainColors.turquoise300
-                              : AgainColors.night700,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                      const SizedBox(height: AgainSpacing.xs),
-                      Text(
-                        const ['P', 'S', 'Ç', 'P', 'C', 'C', 'P'][index],
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.icon, required this.title});
+class _Title extends StatelessWidget {
+  const _Title(this.icon, this.text);
   final IconData icon;
-  final String title;
+  final String text;
   @override
   Widget build(BuildContext context) => Row(
     children: [
       Icon(icon, color: AgainColors.gold400),
-      const SizedBox(width: AgainSpacing.sm),
+      const SizedBox(width: 9),
       Expanded(
-        child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        child: Text(
+          text,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
     ],
   );
 }
 
-class _HomeBottomNav extends StatelessWidget {
-  const _HomeBottomNav();
+class _HomeNavigation extends StatelessWidget {
+  const _HomeNavigation();
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Container(
-      margin: const EdgeInsets.all(AgainSpacing.sm),
-      decoration: BoxDecoration(
-        color: AgainColors.night900.withValues(alpha: .96),
-        borderRadius: BorderRadius.circular(AgainRadii.card),
-        border: Border.all(color: AgainColors.gold400.withValues(alpha: .5)),
+  Widget build(BuildContext context) =>
+      const AgainPrimaryNavigation(selectedIndex: 0);
+}
+
+class _HomeRail extends StatelessWidget {
+  const _HomeRail();
+  @override
+  Widget build(BuildContext context) => NavigationRail(
+    selectedIndex: 0,
+    labelType: NavigationRailLabelType.all,
+    onDestinationSelected: (i) => _go(context, i),
+    destinations: const [
+      NavigationRailDestination(
+        icon: Icon(Icons.home_outlined),
+        label: Text('Ana Sayfa'),
       ),
-      child: NavigationBar(
-        height: 72,
-        backgroundColor: Colors.transparent,
-        selectedIndex: 0,
-        onDestinationSelected: (index) {
-          if (index == 1) {
-            context.go(AppRoutes.worldMapPath);
-          } else if (index == 2) {
-            context.go(AppRoutes.storySquarePath);
-          } else if (index == 3) {
-            context.go(AppRoutes.humaConversationPath);
-          } else if (index == 4) {
-            context.go(AppRoutes.profilePath);
-          } else if (index != 0) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Bu alan yakında açılacak.')),
-            );
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            label: 'Ana Sayfa',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            label: 'Harita',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            label: 'Meydan',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            label: 'Hüma',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            label: 'Profil',
-          ),
-        ],
+      NavigationRailDestination(
+        icon: Icon(Icons.map_outlined),
+        label: Text('Harita'),
       ),
-    ),
+      NavigationRailDestination(
+        icon: Icon(Icons.forum_outlined),
+        label: Text('Meydan'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.auto_awesome_outlined),
+        label: Text('Hüma'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.person_outline),
+        label: Text('Profil'),
+      ),
+    ],
   );
+}
+
+void _go(BuildContext context, int i) {
+  final routes = [
+    AppRoutes.homePath,
+    AppRoutes.worldMapPath,
+    AppRoutes.storySquarePath,
+    AppRoutes.humaConversationPath,
+    AppRoutes.profilePath,
+  ];
+  context.go(routes[i]);
+}
+
+({int index, String label, String next}) _growth(int value) {
+  if (value <= 0) {
+    return (
+      index: 0,
+      label: 'Tohumun dinleniyor.',
+      next: 'İlk hikâyen onu filizlendirecek.',
+    );
+  }
+  if (value == 1) {
+    return (
+      index: 1,
+      label: 'İlk filizin göründü.',
+      next: 'Bir sonraki öğrenme etkinliği filizi güçlendirir.',
+    );
+  }
+  if (value < 4) {
+    return (
+      index: 2,
+      label: 'Filizin güçleniyor.',
+      next: '${4 - value} öğrenme etkinliği sonra genç bitki.',
+    );
+  }
+  if (value < 7) {
+    return (
+      index: 3,
+      label: 'Genç bitkin büyüyor.',
+      next: '${7 - value} öğrenme etkinliği sonra küçük ağaç.',
+    );
+  }
+  if (value < 11) {
+    return (
+      index: 4,
+      label: 'Küçük ağacın kök saldı.',
+      next: '${11 - value} öğrenme etkinliği sonra olgun ağaç.',
+    );
+  }
+  return (
+    index: 5,
+    label: 'Ağacın ışıkla büyüyor.',
+    next: 'Yeni etkinlikler dallarına iz bırakır.',
+  );
+}
+
+String _level(EnglishLevel? level) => switch (level) {
+  EnglishLevel.beginner => 'A1',
+  EnglishLevel.words => 'A1',
+  EnglishLevel.simpleSentences => 'A2',
+  EnglishLevel.conversational => 'B1',
+  EnglishLevel.placementTest || null => 'Seviye bekleniyor',
+};
+
+class _PlantPainter extends CustomPainter {
+  const _PlantPainter(this.stage);
+  final int stage;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final soil = Paint()..color = const Color(0xFF725536);
+    canvas.drawOval(
+      Rect.fromLTWH(8, size.height - 18, size.width - 16, 12),
+      soil,
+    );
+    final stem = Paint()
+      ..color = AgainColors.emerald500
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    if (stage == 0) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(size.width / 2, size.height - 25),
+          width: 18,
+          height: 13,
+        ),
+        Paint()..color = AgainColors.gold400,
+      );
+      return;
+    }
+    final height = 25.0 + stage * 9;
+    canvas.drawLine(
+      Offset(size.width / 2, size.height - 20),
+      Offset(size.width / 2, size.height - 20 - height),
+      stem,
+    );
+    for (var i = 0; i < stage + 1; i++) {
+      final y = size.height - 34 - i * 10;
+      final side = i.isEven ? -1.0 : 1.0;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(size.width / 2 + side * 12, y),
+          width: 25,
+          height: 13,
+        ),
+        Paint()
+          ..color = i < 2 ? AgainColors.emerald200 : AgainColors.emerald500,
+      );
+    }
+    if (stage >= 4) {
+      canvas.drawCircle(
+        Offset(size.width / 2, 24),
+        24 + stage * 2,
+        Paint()..color = AgainColors.emerald600.withValues(alpha: .8),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlantPainter oldDelegate) =>
+      oldDelegate.stage != stage;
 }

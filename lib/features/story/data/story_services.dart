@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../progression/domain/again_progress.dart';
+import '../../progression/presentation/progression_controller.dart';
 
 abstract interface class StoryAudioService {
   Future<void> playPhrase(String phrase);
@@ -68,101 +69,89 @@ class StoryProgressSnapshot {
       (hasFirstSeed ? 1 : 0) + completedChapters.length + rewardSeedGrowth;
 }
 
-class SharedPreferencesStoryProgressRepository
-    implements StoryProgressRepository {
-  SharedPreferencesStoryProgressRepository({SharedPreferencesAsync? prefs})
-    : _prefs = prefs ?? SharedPreferencesAsync();
-  static const _seedKey = 'again.first_seed_awarded';
-  static const _wordsKey = 'again.saved_words';
-  static const _chaptersKey = 'again.completed_chapters';
-  static const _xpKey = 'again.total_xp';
-  static const _rewardSeedKey = 'again.reward_seed_growth';
-  final SharedPreferencesAsync _prefs;
-
-  String get _minutesKey =>
-      'again.minutes.${DateTime.now().toIso8601String().substring(0, 10)}';
-  String get _listeningKey =>
-      'again.listening.${DateTime.now().toIso8601String().substring(0, 10)}';
-  String get _speakingKey =>
-      'again.speaking_minutes.${DateTime.now().toIso8601String().substring(0, 10)}';
-  String get _reviewsKey =>
-      'again.vocabulary_reviews.${DateTime.now().toIso8601String().substring(0, 10)}';
-  String get _claimedRewardsKey =>
-      'again.claimed_rewards.${DateTime.now().toIso8601String().substring(0, 10)}';
-
+class ProgressionStoryProgressRepository implements StoryProgressRepository {
+  ProgressionStoryProgressRepository(this.ref);
+  final Ref ref;
+  Future<AgainProgress> get _progress => ref.read(progressionProvider.future);
   @override
-  Future<void> awardFirstSeed() => _prefs.setBool(_seedKey, true);
+  Future<void> awardFirstSeed() async {}
   @override
-  Future<bool> hasFirstSeed() async => await _prefs.getBool(_seedKey) ?? false;
-
+  Future<bool> hasFirstSeed() async => (await _progress).firstSeedEarned;
   @override
-  Future<void> saveWord(String word) async {
-    final words = {...?await _prefs.getStringList(_wordsKey), word};
-    await _prefs.setStringList(_wordsKey, words.toList());
-  }
-
+  Future<void> saveWord(String word) => ref
+      .read(progressionProvider.notifier)
+      .record(LearningEvent.wordSaved(word));
   @override
-  Future<void> removeWord(String word) async {
-    final words = {...?await _prefs.getStringList(_wordsKey)}..remove(word);
-    await _prefs.setStringList(_wordsKey, words.toList());
-  }
-
+  Future<void> removeWord(String word) => ref
+      .read(progressionProvider.notifier)
+      .record(LearningEvent.wordRemoved(word));
   @override
   Future<void> completeChapter({
     required String chapterId,
     required int minutes,
     required int xp,
-  }) async {
-    final chapters = {...?await _prefs.getStringList(_chaptersKey), chapterId};
-    await _prefs.setStringList(_chaptersKey, chapters.toList());
-    final currentMinutes = await _prefs.getInt(_minutesKey) ?? 0;
-    await _prefs.setInt(_minutesKey, currentMinutes + minutes);
-    final currentXp = await _prefs.getInt(_xpKey) ?? 0;
-    await _prefs.setInt(_xpKey, currentXp + xp);
-    final listening = await _prefs.getInt(_listeningKey) ?? 0;
-    await _prefs.setInt(_listeningKey, listening + 1);
-  }
-
+  }) => ref
+      .read(progressionProvider.notifier)
+      .record(
+        LearningEvent.storyCompleted(
+          storyId: chapterId,
+          chapterId: chapterId,
+          worldId: chapterId == 'hava-durumu'
+              ? 'deniz-kralligi'
+              : 'yasam-vadisi',
+          minutes: minutes,
+          xp: xp,
+          seedGrowth: 1,
+          nextChapterId: chapterId == 'first-encounter'
+              ? 'hava-durumu'
+              : chapterId == 'hava-durumu'
+              ? 'ulasim-araclari'
+              : null,
+        ),
+      );
   @override
-  Future<void> completeVocabularyReview() async {
-    final reviews = await _prefs.getInt(_reviewsKey) ?? 0;
-    await _prefs.setInt(_reviewsKey, reviews + 1);
-  }
-
+  Future<void> completeVocabularyReview() => ref
+      .read(progressionProvider.notifier)
+      .record(LearningEvent.vocabularyReviewed('review'));
   @override
   Future<void> claimDailyReward({
     required String taskId,
     required int xp,
     required int seedGrowth,
-  }) async {
-    final claimed = {...?await _prefs.getStringList(_claimedRewardsKey)};
-    if (claimed.contains(taskId)) return;
-    claimed.add(taskId);
-    await _prefs.setStringList(_claimedRewardsKey, claimed.toList());
-    final currentXp = await _prefs.getInt(_xpKey) ?? 0;
-    await _prefs.setInt(_xpKey, currentXp + xp);
-    final currentGrowth = await _prefs.getInt(_rewardSeedKey) ?? 0;
-    await _prefs.setInt(_rewardSeedKey, currentGrowth + seedGrowth);
-  }
-
+  }) => ref
+      .read(progressionProvider.notifier)
+      .record(
+        LearningEvent.dailyRewardClaimed(
+          taskId,
+          xp: xp,
+          seedGrowth: seedGrowth,
+        ),
+      );
   @override
-  Future<StoryProgressSnapshot> readSnapshot() async => StoryProgressSnapshot(
-    hasFirstSeed: await hasFirstSeed(),
-    savedWords: {...?await _prefs.getStringList(_wordsKey)},
-    completedChapters: {...?await _prefs.getStringList(_chaptersKey)},
-    minutesToday: await _prefs.getInt(_minutesKey) ?? 0,
-    totalXp: await _prefs.getInt(_xpKey) ?? 0,
-    listeningActivities: await _prefs.getInt(_listeningKey) ?? 0,
-    speakingMinutes: await _prefs.getInt(_speakingKey) ?? 0,
-    vocabularyReviews: await _prefs.getInt(_reviewsKey) ?? 0,
-    claimedTaskRewards: {...?await _prefs.getStringList(_claimedRewardsKey)},
-    rewardSeedGrowth: await _prefs.getInt(_rewardSeedKey) ?? 0,
-  );
+  Future<StoryProgressSnapshot> readSnapshot() async {
+    final p = await _progress;
+    final today = p.activityFor(DateTime.now());
+    return StoryProgressSnapshot(
+      hasFirstSeed: p.firstSeedEarned,
+      savedWords: p.savedWordIds,
+      completedChapters: p.completedChapterIds,
+      minutesToday: today.learningMinutes,
+      totalXp: p.totalXp,
+      listeningActivities: today.listeningCount,
+      speakingMinutes: today.speakingMinutes,
+      vocabularyReviews: today.vocabularyReviews,
+      claimedTaskRewards: p.claimedDailyRewards,
+      rewardSeedGrowth:
+          p.seedGrowth -
+          (p.firstSeedEarned ? 1 : 0) -
+          p.completedChapterIds.length,
+    );
+  }
 }
 
 final storyAudioServiceProvider = Provider<StoryAudioService>(
   (ref) => DevelopmentStoryAudioService(),
 );
 final storyProgressRepositoryProvider = Provider<StoryProgressRepository>(
-  (ref) => SharedPreferencesStoryProgressRepository(),
+  (ref) => ProgressionStoryProgressRepository(ref),
 );

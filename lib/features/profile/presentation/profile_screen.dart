@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/again_tokens.dart';
 import '../../../core/widgets/again_components.dart';
+import '../../../core/widgets/again_navigation.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../learner_profile/domain/learner_profile.dart';
 import '../../learner_profile/domain/learner_type.dart';
@@ -404,28 +405,8 @@ class _SectionTitle extends StatelessWidget {
 class _ProfileBottomNav extends StatelessWidget {
   const _ProfileBottomNav();
   @override
-  Widget build(BuildContext context) => NavigationBar(
-    selectedIndex: 4,
-    onDestinationSelected: (index) {
-      if (index == 0) context.go(AppRoutes.homePath);
-      if (index == 1) context.go(AppRoutes.worldMapPath);
-      if (index == 2) context.go(AppRoutes.storySquarePath);
-      if (index == 3) context.go(AppRoutes.humaConversationPath);
-    },
-    destinations: const [
-      NavigationDestination(
-        icon: Icon(Icons.home_outlined),
-        label: 'Ana Sayfa',
-      ),
-      NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Harita'),
-      NavigationDestination(icon: Icon(Icons.forum_outlined), label: 'Meydan'),
-      NavigationDestination(
-        icon: Icon(Icons.auto_awesome_outlined),
-        label: 'Hüma',
-      ),
-      NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profil'),
-    ],
-  );
+  Widget build(BuildContext context) =>
+      const AgainPrimaryNavigation(selectedIndex: 4);
 }
 
 IconData _collectionIcon(int index) => const [

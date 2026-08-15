@@ -2,10 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/conversation_repository.dart';
 import '../domain/conversation_models.dart';
+import '../../learner_profile/domain/learner_type.dart';
+import '../../learner_profile/presentation/learner_selection_controller.dart';
+import '../../onboarding/presentation/onboarding_controller.dart';
 
-final conversationRepositoryProvider = Provider<ConversationRepository>(
-  (ref) => LocalConversationRepository(),
+final humaConversationServiceProvider = Provider<HumaConversationService>(
+  (ref) => LocalHumaConversationService(),
 );
+
+@Deprecated('Use humaConversationServiceProvider.')
+final conversationRepositoryProvider = humaConversationServiceProvider;
 
 final conversationProvider =
     NotifierProvider<ConversationController, ConversationSession?>(
@@ -17,9 +23,13 @@ class ConversationController extends Notifier<ConversationSession?> {
   ConversationSession? build() => null;
 
   void start(ConversationScenario scenario, ConversationMode mode) {
+    final effectiveMode =
+        ref.read(humaConversationServiceProvider).supportsVoice
+        ? mode
+        : ConversationMode.text;
     state = ConversationSession(
       scenario: scenario,
-      mode: mode,
+      mode: effectiveMode,
       messages: const [
         ConversationMessage(
           id: 'huma-0',
@@ -33,6 +43,7 @@ class ConversationController extends Notifier<ConversationSession?> {
         'Could I have some tea?',
       ],
       turn: 0,
+      targetVocabulary: const ['coffee', 'size', 'please'],
     );
   }
 
@@ -45,18 +56,34 @@ class ConversationController extends Notifier<ConversationSession?> {
       author: ConversationAuthor.user,
       text: text,
     );
+    final usedSuggestion = session.suggestions.contains(text);
     state = session.copyWith(
       messages: [...session.messages, userMessage],
       suggestions: const [],
       isTyping: true,
     );
+    final learnerType = ref.read(learnerSelectionProvider).value;
+    final onboarding = ref.read(onboardingProvider).value;
+    final request = HumaConversationRequest(
+      userMessage: text,
+      learnerLevel: onboarding?.level?.name ?? 'unspecified',
+      learnerType: learnerType?.name ?? 'unspecified',
+      scenario: session.scenario,
+      history: [
+        for (final message in [...session.messages, userMessage])
+          HumaConversationTurn(author: message.author, text: message.text),
+      ],
+      safetyProfile: switch (learnerType) {
+        LearnerType.child => HumaSafetyProfile.child,
+        LearnerType.teen => HumaSafetyProfile.teen,
+        _ => HumaSafetyProfile.adult,
+      },
+      learningGoals: onboarding?.goals ?? const {},
+      targetVocabulary: session.targetVocabulary,
+    );
     final reply = await ref
-        .read(conversationRepositoryProvider)
-        .reply(
-          scenario: session.scenario,
-          userMessage: text,
-          turn: session.turn,
-        );
+        .read(humaConversationServiceProvider)
+        .respond(request);
     final current = state;
     if (current == null) return;
     state = current.copyWith(
@@ -65,18 +92,20 @@ class ConversationController extends Notifier<ConversationSession?> {
         ConversationMessage(
           id: 'huma-${current.messages.length}',
           author: ConversationAuthor.huma,
-          text: reply.text,
+          text: reply.assistantText,
           translation: reply.translation,
         ),
       ],
-      suggestions: reply.suggestions,
+      suggestions: reply.suggestedReplies,
       turn: current.turn + 1,
       isTyping: false,
-      newWords: {...current.newWords, ...reply.newWords}.toList(),
+      newWords: {...current.newWords, ...reply.vocabularySuggestions}.toList(),
       strongExpressions: {
         ...current.strongExpressions,
-        ...reply.strongExpressions,
+        ...reply.usefulExpressions,
       }.toList(),
+      suggestedRepliesUsed:
+          current.suggestedRepliesUsed + (usedSuggestion ? 1 : 0),
     );
   }
 
@@ -84,7 +113,7 @@ class ConversationController extends Notifier<ConversationSession?> {
     final session = state;
     if (session == null || value.trim().isEmpty) return;
     final corrected = await ref
-        .read(conversationRepositoryProvider)
+        .read(humaConversationServiceProvider)
         .correctSentence(value);
     if (corrected == null || corrected == value.trim()) return;
     final current = state;

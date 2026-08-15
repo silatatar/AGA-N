@@ -8,6 +8,7 @@ import '../../../core/widgets/again_components.dart';
 import '../../onboarding/domain/onboarding_preferences.dart';
 import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../opening/presentation/opening_atmosphere.dart';
+import '../../huma/presentation/huma_components.dart';
 import '../../story/data/story_services.dart';
 import '../domain/conversation_models.dart';
 import 'conversation_controller.dart';
@@ -39,10 +40,10 @@ class _HumaConversationEntryScreenState
                     sliver: SliverToBoxAdapter(
                       child: Column(
                         children: [
-                          const HumaAvatar(size: 116),
+                          const HumaHero(height: 210),
                           const SizedBox(height: 16),
                           Text(
-                            'Hüma ile konuş',
+                            'Bugün biraz İngilizce konuşalım mı?',
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
                           const SizedBox(height: 8),
@@ -73,7 +74,8 @@ class _HumaConversationEntryScreenState
                                   ButtonSegment(
                                     value: ConversationMode.voice,
                                     icon: Icon(Icons.mic_none),
-                                    label: Text('Ses'),
+                                    label: Text('Ses yakında'),
+                                    enabled: false,
                                   ),
                                 ],
                                 selected: {_mode},

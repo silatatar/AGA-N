@@ -15,13 +15,17 @@ class SharedPreferencesVocabularyRepository implements VocabularyRepository {
   SharedPreferencesVocabularyRepository({SharedPreferencesAsync? preferences})
     : _preferences = preferences ?? SharedPreferencesAsync();
   static const _key = 'again.vocabulary_entries';
+  static const schemaVersion = 2;
   final SharedPreferencesAsync _preferences;
 
   @override
   Future<List<VocabularyEntry>> readAll() async {
     final raw = await _preferences.getString(_key);
     if (raw == null) return [];
-    final list = jsonDecode(raw) as List<dynamic>;
+    final decoded = jsonDecode(raw);
+    final list = decoded is List<dynamic>
+        ? decoded
+        : (decoded as Map<String, dynamic>)['entries'] as List<dynamic>;
     return list
         .map((item) => VocabularyEntry.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -52,6 +56,9 @@ class SharedPreferencesVocabularyRepository implements VocabularyRepository {
 
   Future<void> _write(List<VocabularyEntry> entries) => _preferences.setString(
     _key,
-    jsonEncode(entries.map((entry) => entry.toJson()).toList()),
+    jsonEncode({
+      'version': schemaVersion,
+      'entries': entries.map((entry) => entry.toJson()).toList(),
+    }),
   );
 }

@@ -64,6 +64,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/huma.png
+    - assets/images/worlds/shared/world_map_atlas_placeholder.webp
+    - assets/images/worlds/deniz_kralligi/hero_background.webp
+    - assets/images/stories/deniz_kralligi/hava_durumu/scene_01.webp
 
   # To add assets to your application, add an assets section, like this:
   # assets:

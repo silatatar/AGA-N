@@ -27,6 +27,9 @@ class _VocabularyReviewScreenState
   final _sentence = TextEditingController();
   bool _answered = false;
   bool _correct = false;
+  VocabularyGrowthState? _growthBefore;
+  VocabularyGrowthState? _growthAfter;
+  DateTime? _nextReview;
 
   @override
   void dispose() {
@@ -35,13 +38,16 @@ class _VocabularyReviewScreenState
   }
 
   Future<void> _answer(VocabularyEntry entry, bool correct) async {
-    await ref
+    final updated = await ref
         .read(vocabularyProvider.notifier)
         .recordReview(entry: entry, mode: widget.mode, correct: correct);
     if (mounted) {
       setState(() {
         _answered = true;
         _correct = correct;
+        _growthBefore = entry.growthState;
+        _growthAfter = updated.growthState;
+        _nextReview = updated.nextReviewAt;
       });
     }
   }
@@ -107,9 +113,26 @@ class _VocabularyReviewScreenState
                             ),
                             const SizedBox(height: AgainSpacing.sm),
                             Text(
-                              'Yeni prototip tekrar aralığı: ${_correct ? 1 : 1} gün',
+                              _correct
+                                  ? 'Bir sonraki bakım: ${_date(_nextReview)}'
+                                  : 'Bu kelime bugün yeniden karşına çıkacak.',
                               style: const TextStyle(color: AgainColors.mist),
                             ),
+                            if (_growthBefore != _growthAfter) ...[
+                              const SizedBox(height: AgainSpacing.md),
+                              Semantics(
+                                liveRegion: true,
+                                child: const Text(
+                                  'Kelimen gerçek bir büyüme aşamasına ulaştı.',
+                                  key: Key('vocabulary-growth-moment'),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AgainColors.emerald200,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: AgainSpacing.md),
                             AgainPrimaryButton(
                               key: const Key('review-finish'),
@@ -202,6 +225,11 @@ class _VocabularyReviewScreenState
       ),
     };
   }
+}
+
+String _date(DateTime? value) {
+  if (value == null) return 'planlanıyor';
+  return '${value.day}.${value.month}.${value.year}';
 }
 
 class _OptionsQuestion extends StatelessWidget {

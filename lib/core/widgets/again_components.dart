@@ -174,14 +174,17 @@ class AgainTextField extends StatelessWidget {
 }
 
 class HumaAvatar extends StatelessWidget {
-  const HumaAvatar({super.key, this.size = 72});
+  const HumaAvatar({super.key, this.size = 72, this.decorative = false});
 
   final double size;
+  final bool decorative;
 
   @override
   Widget build(BuildContext context) => Semantics(
+    excludeSemantics: decorative,
+    container: !decorative,
     image: true,
-    label: 'Hüma, AGAIN öğrenme rehberi',
+    label: decorative ? null : 'Hüma, AGAIN öğrenme rehberi',
     child: Container(
       width: size,
       height: size,
@@ -196,6 +199,7 @@ class HumaAvatar extends StatelessWidget {
         'assets/images/huma.png',
         fit: BoxFit.cover,
         alignment: const Alignment(0, -.62),
+        cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
       ),
     ),
   );

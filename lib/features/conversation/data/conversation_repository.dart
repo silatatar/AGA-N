@@ -1,56 +1,65 @@
 import '../domain/conversation_models.dart';
 
-abstract interface class ConversationRepository {
-  Future<ConversationReply> reply({
-    required ConversationScenario scenario,
-    required String userMessage,
-    required int turn,
-  });
+abstract interface class HumaConversationService {
+  bool get isLocalDeterministic;
+  bool get supportsVoice;
+  Future<HumaConversationResponse> respond(HumaConversationRequest request);
   Future<String?> correctSentence(String sentence);
 }
 
 /// Development-only scripted adapter. A secure backend can replace this
 /// implementation without changing presentation or session state.
-class LocalConversationRepository implements ConversationRepository {
+class LocalHumaConversationService implements HumaConversationService {
   @override
-  Future<ConversationReply> reply({
-    required ConversationScenario scenario,
-    required String userMessage,
-    required int turn,
-  }) async {
+  bool get isLocalDeterministic => true;
+
+  @override
+  bool get supportsVoice => false;
+
+  @override
+  Future<HumaConversationResponse> respond(
+    HumaConversationRequest request,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 520));
-    if (scenario != ConversationScenario.cafe) {
-      return const ConversationReply(
-        text: 'Let’s continue this scenario when its lesson is ready.',
+    if (request.scenario != ConversationScenario.cafe) {
+      return const HumaConversationResponse(
+        assistantText: 'Let’s continue this scenario when its lesson is ready.',
         translation: 'Bu senaryonun dersi hazır olduğunda devam edelim.',
-        suggestions: [],
-        newWords: [],
-        strongExpressions: [],
+        suggestedReplies: [],
+        safetyState: HumaSafetyState.safe,
       );
     }
+    final turn =
+        request.history
+            .where((item) => item.author == ConversationAuthor.user)
+            .length -
+        1;
     return switch (turn) {
-      0 => const ConversationReply(
-        text: 'Of course. What size would you like?',
+      0 => const HumaConversationResponse(
+        assistantText: 'Of course. What size would you like?',
         translation: 'Elbette. Hangi boyu istersiniz?',
-        suggestions: ['A medium, please.', 'A small one, please.'],
-        newWords: ['size', 'medium'],
-        strongExpressions: ['I’d like a coffee, please.'],
+        suggestedReplies: ['A medium, please.', 'A small one, please.'],
+        vocabularySuggestions: ['size', 'medium'],
+        usefulExpressions: ['I’d like a coffee, please.'],
+        safetyState: HumaSafetyState.safe,
       ),
-      1 => const ConversationReply(
-        text: 'Would you like milk with your coffee?',
+      1 => const HumaConversationResponse(
+        assistantText: 'Would you like milk with your coffee?',
         translation: 'Kahvenizle süt ister misiniz?',
-        suggestions: ['Yes, please.', 'No, thank you.'],
-        newWords: ['with'],
-        strongExpressions: ['A medium, please.'],
+        suggestedReplies: ['Yes, please.', 'No, thank you.'],
+        vocabularySuggestions: ['with'],
+        usefulExpressions: ['A medium, please.'],
+        safetyState: HumaSafetyState.safe,
       ),
-      _ => const ConversationReply(
-        text:
+      _ => const HumaConversationResponse(
+        assistantText:
             'Perfect. Your coffee will be ready soon. That will be four euros.',
         translation:
             'Harika. Kahveniz yakında hazır olacak. Dört avro tutuyor.',
-        suggestions: ['Thank you!', 'That’s all, thank you.'],
-        newWords: ['ready', 'soon'],
-        strongExpressions: ['No, thank you.'],
+        suggestedReplies: ['Thank you!', 'That’s all, thank you.'],
+        vocabularySuggestions: ['ready', 'soon'],
+        usefulExpressions: ['No, thank you.'],
+        safetyState: HumaSafetyState.safe,
       ),
     };
   }
@@ -69,3 +78,9 @@ class LocalConversationRepository implements ConversationRepository {
         : '${sentence.trim()}.';
   }
 }
+
+@Deprecated('Use HumaConversationService.')
+typedef ConversationRepository = HumaConversationService;
+
+@Deprecated('Use LocalHumaConversationService.')
+typedef LocalConversationRepository = LocalHumaConversationService;

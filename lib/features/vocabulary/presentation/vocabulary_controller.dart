@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/vocabulary_repository.dart';
 import '../domain/vocabulary_entry.dart';
+import '../../story/data/story_services.dart';
+import '../../story/domain/story_definition.dart';
 
 final vocabularyRepositoryProvider = Provider<VocabularyRepository>(
   (ref) => SharedPreferencesVocabularyRepository(),
@@ -14,6 +16,30 @@ class VocabularyController extends AsyncNotifier<List<VocabularyEntry>> {
 
   Future<void> saveStoryWord(String word) async {
     await ref.read(vocabularyRepositoryProvider).save(vocabularyTemplate(word));
+    ref.invalidateSelf();
+  }
+
+  Future<void> saveStoryVocabularyItem({
+    required StoryVocabularyItem item,
+    required String storyId,
+    required String storyTitle,
+    required String worldId,
+    required String worldTitle,
+  }) async {
+    final entry = vocabularyTemplate(
+      item.word,
+      id: item.id,
+      turkishMeaning: item.turkishMeaning,
+      englishDefinition: item.englishDefinition,
+      pronunciation: item.pronunciation,
+      exampleSentence: item.example,
+      storyContext: item.storyContext,
+      storyTitle: storyTitle,
+      storyId: storyId,
+      worldId: worldId,
+      worldTitle: worldTitle,
+    );
+    await ref.read(vocabularyRepositoryProvider).save(entry);
     ref.invalidateSelf();
   }
 
@@ -36,25 +62,15 @@ class VocabularyController extends AsyncNotifier<List<VocabularyEntry>> {
     required ReviewMode mode,
     required bool correct,
   }) async {
-    final streak = correct ? entry.correctStreak + 1 : 0;
-    final interval = correct ? const [1, 3, 7, 14][streak.clamp(1, 4) - 1] : 1;
-    final mastery = !correct
-        ? WordMastery.learning
-        : streak >= 4
-        ? WordMastery.mastered
-        : streak >= 2
-        ? WordMastery.familiar
-        : WordMastery.learning;
-    final updated = entry.copyWith(
-      mastery: mastery,
-      reviewCount: entry.reviewCount + 1,
-      correctStreak: streak,
-      intervalDays: interval,
-      nextReviewAt: DateTime.now().add(Duration(days: interval)),
-      isDifficult: correct ? entry.isDifficult : true,
-      lastReviewMode: mode,
+    final reviewedAt = DateTime.now();
+    final updated = applyVocabularyReview(
+      entry: entry,
+      mode: mode,
+      correct: correct,
+      reviewedAt: reviewedAt,
     );
     await _update(updated);
+    await ref.read(storyProgressRepositoryProvider).completeVocabularyReview();
     return updated;
   }
 

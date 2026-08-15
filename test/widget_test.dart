@@ -6,15 +6,18 @@ import 'package:again/features/learner_profile/domain/learner_type.dart';
 import 'package:again/features/learner_profile/domain/learner_profile.dart';
 import 'package:again/features/learner_profile/presentation/learner_selection_controller.dart';
 import 'package:again/features/learner_profile/presentation/learner_profile_controller.dart';
-import 'package:again/features/home/presentation/home_dashboard_screen.dart';
 import 'package:again/features/onboarding/data/onboarding_preferences_repository.dart';
 import 'package:again/features/onboarding/domain/onboarding_preferences.dart';
 import 'package:again/features/onboarding/presentation/onboarding_controller.dart';
 import 'package:again/features/profile/presentation/profile_progress_controller.dart';
+import 'package:again/features/progression/presentation/progression_controller.dart';
+import 'package:again/features/progression/data/progression_repository.dart';
+import 'package:again/features/progression/domain/again_progress.dart';
 import 'package:again/features/auth/domain/auth_repository.dart';
 import 'package:again/features/auth/presentation/auth_controller.dart';
 import 'package:again/features/story/data/story_services.dart';
 import 'package:again/features/tasks/presentation/daily_tasks_screen.dart';
+import 'package:again/features/world/presentation/world_map_screen.dart';
 import 'package:again/features/vocabulary/data/vocabulary_repository.dart';
 import 'package:again/features/vocabulary/domain/vocabulary_entry.dart';
 import 'package:again/features/vocabulary/presentation/vocabulary_controller.dart';
@@ -178,6 +181,16 @@ class FakeVocabularyRepository implements VocabularyRepository {
   }
 }
 
+class FakeProgressionRepository implements ProgressionRepository {
+  AgainProgress progress = const AgainProgress();
+
+  @override
+  Future<AgainProgress> read() async => progress;
+
+  @override
+  Future<void> save(AgainProgress value) async => progress = value;
+}
+
 void main() {
   Future<
     (
@@ -187,6 +200,7 @@ void main() {
       FakeStoryProgressRepository,
       FakeStoryAudioService,
       FakeVocabularyRepository,
+      FakeProgressionRepository,
     )
   >
   pumpApp(
@@ -204,6 +218,7 @@ void main() {
     final storyProgress = FakeStoryProgressRepository();
     final storyAudio = FakeStoryAudioService();
     final vocabularyRepository = FakeVocabularyRepository();
+    final progressionRepository = FakeProgressionRepository();
     final container = ProviderContainer(
       overrides: [
         learnerPreferenceRepositoryProvider.overrideWithValue(repository),
@@ -212,6 +227,7 @@ void main() {
         storyProgressRepositoryProvider.overrideWithValue(storyProgress),
         storyAudioServiceProvider.overrideWithValue(storyAudio),
         vocabularyRepositoryProvider.overrideWithValue(vocabularyRepository),
+        progressionRepositoryProvider.overrideWithValue(progressionRepository),
       ],
     );
     addTearDown(container.dispose);
@@ -228,6 +244,71 @@ void main() {
       storyProgress,
       storyAudio,
       vocabularyRepository,
+      progressionRepository,
+    );
+  }
+
+  for (final size in phase19ResponsiveSizes) {
+    testWidgets(
+      'Phase 19 world map fits ${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        await pumpApp(tester, size: size, route: AppRoutes.worldMapPath);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('Dünya Haritası'), findsOneWidget);
+        expect(find.byKey(const Key('world-yasam-vadisi')), findsOneWidget);
+        expect(find.text('Harita'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final size in phase19ResponsiveSizes) {
+    testWidgets(
+      'Phase 23 vocabulary garden fits ${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        final result = await pumpApp(
+          tester,
+          size: size,
+          route: AppRoutes.vocabularyGardenPath,
+        );
+        result.$6.entries.add(vocabularyTemplate('cloudy'));
+        result.$1.invalidate(vocabularyProvider);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('vocabulary-garden-scene')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('garden-plant-cloudy')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final size in phase19ResponsiveSizes) {
+    testWidgets(
+      'Phase 22 living home fits ${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        await pumpApp(tester, size: size, route: AppRoutes.homePath);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byKey(const Key('home-greeting')), findsOneWidget);
+        expect(find.byKey(const Key('home-scroll')), findsOneWidget);
+        expect(find.byKey(const Key('home-continue-story')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final size in phase19ResponsiveSizes) {
+    testWidgets(
+      'Phase 20 world detail fits ${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        await pumpApp(tester, size: size, route: '/world/deniz-kralligi');
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byKey(const Key('world-detail-title')), findsOneWidget);
+        expect(find.byKey(const Key('world-detail-scroll')), findsOneWidget);
+        expect(find.text('Bölüm Yolculuğu'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
     );
   }
 
@@ -275,7 +356,7 @@ void main() {
   testWidgets(
     'story square identifies demo activity and runs guided practice',
     (tester) async {
-      await pumpApp(tester, route: AppRoutes.storySquarePath);
+      final result = await pumpApp(tester, route: AppRoutes.storySquarePath);
       await tester.pumpAndSettle();
 
       expect(find.text('Hikâye Meydanı'), findsOneWidget);
@@ -289,6 +370,10 @@ void main() {
       await tester.tap(find.text('The people make it feel like home.'));
       await tester.pump();
       expect(find.byKey(const Key('guided-practice-feedback')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('complete-guided-practice')));
+      await tester.pumpAndSettle();
+      expect(result.$7.progress.speakingMinutes, 0);
+      expect(find.text('Pratik Tamamlandı'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -331,13 +416,16 @@ void main() {
       level: EnglishLevel.conversational,
       dailyMinutes: 15,
     );
-    result.$4
-      ..awarded = true
-      ..minutes = 18
-      ..xp = 270
-      ..speaking = 7
-      ..rewardGrowth = 2
-      ..chapters.addAll({'first-story', 'hava-durumu'});
+    result.$7.progress = AgainProgress(
+      completedChapterIds: const {'first-story', 'hava-durumu'},
+      totalXp: 270,
+      speakingMinutes: 7,
+      firstSeedEarned: true,
+      seedGrowth: 5,
+      activityHistory: [
+        DailyActivity(date: DateTime.now(), learningMinutes: 18),
+      ],
+    );
     result.$6.entries.add(
       vocabularyTemplate('cloudy').copyWith(mastery: WordMastery.learning),
     );
@@ -345,6 +433,7 @@ void main() {
     result.$1.invalidate(learnerProfileProvider);
     result.$1.invalidate(onboardingProvider);
     result.$1.invalidate(vocabularyProvider);
+    result.$1.invalidate(progressionProvider);
     result.$1.invalidate(profileProgressProvider);
     await tester.pumpAndSettle();
 
@@ -353,7 +442,7 @@ void main() {
     expect(find.text('Yetişkin • Konuşma'), findsOneWidget);
     expect(find.text('270 XP'), findsOneWidget);
     expect(find.text('7 dk'), findsOneWidget);
-    expect(find.text('18 dk'), findsOneWidget);
+    expect(find.text('Haftalık süre'), findsOneWidget);
     expect(find.text('İlk filiz'), findsOneWidget);
     expect(find.text('5 / 6 • sonraki büyüme eşiği'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -363,16 +452,19 @@ void main() {
     tester,
   ) async {
     final result = await pumpApp(tester, route: AppRoutes.atlasPath);
-    result.$4
-      ..awarded = true
-      ..chapters.add('hava-durumu');
+    result.$7.progress = const AgainProgress(
+      completedChapterIds: {'first-encounter', 'hava-durumu'},
+      unlockedWorldIds: {'yasam-vadisi', 'sessiz-orman', 'deniz-kralligi'},
+      firstSeedEarned: true,
+    );
     result.$6.entries.add(vocabularyTemplate('cloudy'));
     result.$1.invalidate(vocabularyProvider);
+    result.$1.invalidate(progressionProvider);
     result.$1.invalidate(atlasProvider);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('atlas-progress')), findsOneWidget);
-    expect(find.text('Keşfedilen: 3 / 11'), findsOneWidget);
+    expect(find.text('Keşfedilen: 2 / 11'), findsOneWidget);
     expect(find.byKey(const Key('atlas-world-yasam-vadisi')), findsOneWidget);
     expect(find.byKey(const Key('atlas-world-sessiz-orman')), findsOneWidget);
     expect(find.byKey(const Key('atlas-world-deniz-kralligi')), findsOneWidget);
@@ -394,7 +486,11 @@ void main() {
     'Atlas separates character and item collections from map navigation',
     (tester) async {
       final result = await pumpApp(tester, route: AppRoutes.atlasPath);
-      result.$4.awarded = true;
+      result.$7.progress = const AgainProgress(
+        completedChapterIds: {'first-encounter'},
+        firstSeedEarned: true,
+      );
+      result.$1.invalidate(progressionProvider);
       result.$1.invalidate(atlasProvider);
       await tester.pumpAndSettle();
 
@@ -411,6 +507,18 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('locked Atlas world cannot be opened by direct route', (
+    tester,
+  ) async {
+    await pumpApp(tester, route: '/atlas/world/sessiz-orman');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bu kayıt henüz kilitli'), findsOneWidget);
+    expect(find.text('Dünya Kaydı'), findsOneWidget);
+    expect(find.text('Keşfedilen Hikâyeler'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('opening flow reaches learner selection and profile name', (
     tester,
@@ -604,17 +712,15 @@ void main() {
 
     await tester.tap(find.text('Vadiyi keşfet'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('story-listen')));
-    await tester.pumpAndSettle();
-    expect(result.$5.plays, 1);
+    expect(result.$5.plays, 0);
     await tester.tap(find.byKey(const Key('story-word-hello')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Hello — Merhaba'), findsOneWidget);
+    expect(find.byKey(const Key('word-panel-title')), findsOneWidget);
     await tester.tap(find.byKey(const Key('story-phrase-continue')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hello, Mira!'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('İlk tohumunu al'));
+    await tester.tap(find.byKey(const Key('story-complete')));
     await tester.pumpAndSettle();
     expect(result.$4.awarded, isTrue);
     expect(find.text('İlk kelimen filizlendi.'), findsOneWidget);
@@ -623,11 +729,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Dünya Haritası'), findsOneWidget);
     expect(find.byKey(const Key('world-yasam-vadisi')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('world-yasam-vadisi')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byKey(const Key('world-detail-title')), findsOneWidget);
-    expect(find.text('Yaşam Vadisi'), findsOneWidget);
+    expect(find.byKey(const Key('world-yasam-vadisi')), findsOneWidget);
   });
 
   testWidgets('Deniz Krallığı chapters are unique and selectable', (
@@ -637,32 +739,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Deniz Krallığı'), findsOneWidget);
-    for (final title in const [
-      'Duygular',
-      'Hava Durumu',
-      'Ulaşım Araçları',
-      'Yolculuk Hazırlığı',
-      'Seyahat Planı',
-      'Deniz Canlıları',
+    for (final entry in const [
+      ('duygular', 'Duygular'),
+      ('hava-durumu', 'Hava Durumu'),
+      ('ulasim-araclari', 'Ulaşım Araçları'),
+      ('yolculuk-hazirligi', 'Yolculuk Hazırlığı'),
+      ('seyahat-plani', 'Seyahat Planı'),
+      ('deniz-canlilari', 'Deniz Canlıları'),
     ]) {
-      expect(find.text(title), findsOneWidget);
+      final node = find.byKey(Key('chapter-${entry.$1}'));
+      await tester.ensureVisible(node);
+      await tester.pump();
+      expect(
+        find.text(
+          '${entry.$1 == 'duygular'
+              ? 1
+              : entry.$1 == 'hava-durumu'
+              ? 2
+              : entry.$1 == 'ulasim-araclari'
+              ? 3
+              : entry.$1 == 'yolculuk-hazirligi'
+              ? 4
+              : entry.$1 == 'seyahat-plani'
+              ? 5
+              : 6}. ${entry.$2}',
+        ),
+        findsOneWidget,
+      );
     }
     expect(find.text('15 dk'), findsOneWidget);
     expect(find.text('18 kelime'), findsOneWidget);
 
-    final chapter = find.byKey(const Key('chapter-ulasim-araclari'));
-    await tester.ensureVisible(chapter);
-    await tester.pumpAndSettle();
-    await tester.tap(chapter);
-    await tester.pump();
-    final continueButton = find.byKey(const Key('chapter-continue'));
-    await tester.ensureVisible(continueButton);
-    await tester.pumpAndSettle();
-    await tester.tap(continueButton);
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('chapter-intro-title')), findsOneWidget);
-    expect(find.text('3. Bölüm · Ulaşım Araçları'), findsOneWidget);
+    expect(find.byKey(const Key('chapter-ulasim-araclari')), findsOneWidget);
+    expect(find.byKey(const Key('chapter-hava-durumu')), findsOneWidget);
+    expect(find.text('Yakında'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -676,11 +786,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Fırtına Öncesi'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('audio-play-pause')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('replay-sentence')));
-    await tester.pump();
-    expect(result.$5.plays, 2);
+    expect(find.text('Ses yakında'), findsOneWidget);
+    expect(result.$5.plays, 0);
 
     await tester.tap(find.byKey(const Key('story-word-rain')));
     await tester.pumpAndSettle();
@@ -700,16 +807,42 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(correctChoice);
     await tester.pumpAndSettle();
-    expect(find.text('İyi düşünce!'), findsOneWidget);
+    expect(find.textContaining('doğal'), findsOneWidget);
+    await tester.ensureVisible(find.text('Dil ipucu'));
+    await tester.tap(find.text('Dil ipucu'));
+    await tester.pump();
+    expect(find.byKey(const Key('grammar-note')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('story-player-next')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('story-player-next')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('story-writing')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('story-writing')),
+      'It is cloudy today.',
+    );
+    await tester.ensureVisible(find.byKey(const Key('story-player-next')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('story-player-next')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('konuşma ilerlemesi kazandırmaz'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.byKey(const Key('story-player-next')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('story-player-next')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('story-complete')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('story-complete')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('story-completion-title')), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('1'), findsWidgets);
     expect(find.text('+25 XP'), findsOneWidget);
-    expect(find.text('+1 yaprak'), findsOneWidget);
+    expect(find.text('1'), findsWidgets);
     expect(find.byKey(const Key('completion-continue')), findsOneWidget);
     expect(result.$4.words, contains('rain'));
     expect(result.$6.entries.map((entry) => entry.word), contains('rain'));
@@ -728,6 +861,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('garden-word-rain')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('garden-word-rain')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('garden-word-rain')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('word-detail-title')), findsOneWidget);
@@ -769,16 +904,15 @@ void main() {
       ..invalidate(learnerSelectionProvider)
       ..invalidate(learnerProfileProvider)
       ..invalidate(onboardingProvider)
-      ..invalidate(homeStoryProgressProvider);
+      ..invalidate(progressionProvider);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Aslı.'), findsOneWidget);
-    expect(find.text('15 / 15 dakika'), findsOneWidget);
-    expect(find.text('rain'), findsOneWidget);
-    expect(find.text('2 büyüme izi'), findsOneWidget);
-    expect(find.text('25 XP ile besleniyor'), findsOneWidget);
-    expect(find.text('Tamamlandı · Tekrar edebilirsin'), findsOneWidget);
-    expect(find.text('Haftalık ilerleme'), findsOneWidget);
+    expect(find.byKey(const Key('home-daily-goal')), findsOneWidget);
+    expect(find.byKey(const Key('home-level-xp')), findsOneWidget);
+    expect(find.byKey(const Key('home-seed-growth')), findsOneWidget);
+    expect(find.byKey(const Key('home-weekly-minutes')), findsOneWidget);
+    expect(find.byKey(const Key('home-continue-story')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -799,12 +933,11 @@ void main() {
     result.$1
       ..invalidate(learnerSelectionProvider)
       ..invalidate(learnerProfileProvider)
-      ..invalidate(onboardingProvider)
-      ..invalidate(homeStoryProgressProvider);
+      ..invalidate(onboardingProvider);
     await tester.pumpAndSettle();
 
-    expect(find.text('Bugün küçük bir keşfe çıkalım!'), findsOneWidget);
-    expect(find.text('Deniz Krallığı’nda havayı keşfedelim.'), findsOneWidget);
+    expect(find.textContaining('Ece.'), findsOneWidget);
+    expect(find.text('Hüma'), findsWidgets);
     expect(find.text('0 / 10 dakika'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
