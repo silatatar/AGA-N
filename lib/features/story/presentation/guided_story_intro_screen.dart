@@ -44,6 +44,7 @@ class _GuidedStoryIntroScreenState
     final type = ref.watch(learnerSelectionProvider).value;
     final level = ref.watch(onboardingProvider).value?.level;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final audioAvailable = ref.watch(storyAudioAvailabilityProvider);
     return Scaffold(
       backgroundColor: AgainColors.night950,
       body: Stack(
@@ -90,7 +91,7 @@ class _GuidedStoryIntroScreenState
                           duration: reduceMotion
                               ? Duration.zero
                               : AgainDurations.page,
-                          child: _storyContent(type, level),
+                          child: _storyContent(type, level, audioAvailable),
                         ),
                       ),
                     ],
@@ -107,6 +108,7 @@ class _GuidedStoryIntroScreenState
   Widget _storyContent(
     LearnerType? type,
     EnglishLevel? level,
+    bool audioAvailable,
   ) => switch (_stage) {
     0 => _Dialogue(
       key: const ValueKey(0),
@@ -144,8 +146,10 @@ class _GuidedStoryIntroScreenState
         const SizedBox(height: AgainSpacing.md),
         IconButton.filledTonal(
           key: const Key('story-listen'),
-          tooltip: _playing ? 'Dinleniyor' : 'Cümleyi dinle',
-          onPressed: _playing ? null : _listen,
+          tooltip: audioAvailable
+              ? (_playing ? 'Dinleniyor' : 'Cümleyi dinle')
+              : 'Ses henüz kullanılamıyor',
+          onPressed: !audioAvailable || _playing ? null : _listen,
           icon: Icon(
             _playing ? Icons.graphic_eq_rounded : Icons.volume_up_rounded,
           ),

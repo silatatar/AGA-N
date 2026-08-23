@@ -80,10 +80,21 @@ class _WordDetailScreenState extends ConsumerState<WordDetailScreen> {
                                     ),
                                   ),
                                   IconButton(
-                                    tooltip: 'Kelimeyi dinle',
-                                    onPressed: () => ref
-                                        .read(storyAudioServiceProvider)
-                                        .playPhrase(entry.word),
+                                    key: const Key('word-pronunciation-audio'),
+                                    tooltip:
+                                        ref.watch(
+                                          storyAudioAvailabilityProvider,
+                                        )
+                                        ? 'Kelimeyi dinle'
+                                        : 'Ses henüz kullanılamıyor',
+                                    onPressed:
+                                        ref.watch(
+                                          storyAudioAvailabilityProvider,
+                                        )
+                                        ? () => ref
+                                              .read(storyAudioServiceProvider)
+                                              .playPhrase(entry.word)
+                                        : null,
                                     icon: const Icon(Icons.volume_up_rounded),
                                   ),
                                   IconButton(

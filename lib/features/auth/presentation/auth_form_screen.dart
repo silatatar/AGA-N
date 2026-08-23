@@ -245,6 +245,8 @@ class _AuthError extends StatelessWidget {
     AuthFailure.offline => 'İnternet bağlantısı görünmüyor.',
     AuthFailure.incorrectCredentials => 'E-posta veya şifre doğru değil.',
     AuthFailure.emailInUse => 'Bu e-posta ile daha önce hesap açılmış.',
+    AuthFailure.providerUnavailable =>
+      'Hesap hizmeti henüz bağlı değil. Misafir olarak devam edebilirsin.',
     AuthFailure.unknown => 'Bir şeyler ters gitti. Lütfen tekrar dene.',
   };
   @override

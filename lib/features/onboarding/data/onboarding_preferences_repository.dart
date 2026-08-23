@@ -1,7 +1,8 @@
-import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../learner_profile/data/learner_personalization_store.dart';
+import '../../sync/data/local_key_value_store.dart';
+import '../../sync/domain/data_ownership.dart';
 import '../domain/onboarding_preferences.dart';
 
 abstract interface class OnboardingPreferencesRepository {
@@ -11,37 +12,28 @@ abstract interface class OnboardingPreferencesRepository {
 
 class SharedPreferencesOnboardingRepository
     implements OnboardingPreferencesRepository {
-  SharedPreferencesOnboardingRepository({SharedPreferencesAsync? preferences})
-    : _preferences = preferences ?? SharedPreferencesAsync();
-
-  static const _key = 'again.onboarding_preferences';
-  final SharedPreferencesAsync _preferences;
+  SharedPreferencesOnboardingRepository({
+    SharedPreferencesAsync? preferences,
+    LocalKeyValueStore? store,
+    DataOwnershipStore? ownership,
+  }) : _store = LearnerPersonalizationStore(
+         store:
+             store ??
+             (preferences == null
+                 ? null
+                 : SharedPreferencesLocalKeyValueStore(preferences)),
+         ownership: ownership,
+       );
+  final LearnerPersonalizationStore _store;
 
   @override
   Future<OnboardingPreferences> read() async {
-    final raw = await _preferences.getString(_key);
-    if (raw == null) return const OnboardingPreferences();
-    final json = jsonDecode(raw) as Map<String, dynamic>;
-    final levelName = json['level'] as String?;
-    return OnboardingPreferences(
-      goals: Set<String>.from(json['goals'] as List? ?? const []),
-      level: EnglishLevel.values
-          .where((level) => level.name == levelName)
-          .firstOrNull,
-      interests: Set<String>.from(json['interests'] as List? ?? const []),
-      dailyMinutes: json['dailyMinutes'] as int?,
-    );
+    return (await _store.read()).preferences;
   }
 
   @override
-  Future<void> save(OnboardingPreferences preferences) =>
-      _preferences.setString(
-        _key,
-        jsonEncode({
-          'goals': preferences.goals.toList(),
-          'level': preferences.level?.name,
-          'interests': preferences.interests.toList(),
-          'dailyMinutes': preferences.dailyMinutes,
-        }),
-      );
+  Future<void> save(OnboardingPreferences preferences) async {
+    final current = await _store.read();
+    await _store.save(current.copyWith(preferences: preferences));
+  }
 }

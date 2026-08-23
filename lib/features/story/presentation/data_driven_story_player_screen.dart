@@ -199,35 +199,65 @@ class _SceneArt extends StatelessWidget {
   const _SceneArt({required this.scene});
   final StoryScene scene;
   @override
-  Widget build(BuildContext context) => Semantics(
-    image: true,
-    label: scene.semanticLabel ?? 'Hikâye sahnesi',
-    child: RepaintBoundary(
-      child: SizedBox(
-        height: (MediaQuery.sizeOf(context).height * .36).clamp(190, 390),
-        width: double.infinity,
-        child: scene.assetPath == null
-            ? const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: AgainColors.welcomeGradient,
-                ),
-              )
-            : Image.asset(
-                scene.assetPath!,
-                fit: BoxFit.cover,
-                cacheWidth: 1440,
-                errorBuilder: (context, error, stack) => const DecoratedBox(
+  Widget build(BuildContext context) {
+    final visual = scene.visual;
+    return Semantics(
+      image: true,
+      label: visual?.accessibilityDescription ?? 'Hikâye sahnesi',
+      child: RepaintBoundary(
+        child: SizedBox(
+          height: (MediaQuery.sizeOf(context).height * .36).clamp(190, 390),
+          width: double.infinity,
+          child: visual == null
+              ? const DecoratedBox(
+                  key: Key('story-scene-fallback'),
                   decoration: BoxDecoration(
                     gradient: AgainColors.welcomeGradient,
                   ),
-                  child: Center(
-                    child: Icon(Icons.image_not_supported_outlined),
-                  ),
+                )
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.asset(
+                      visual.assetPath,
+                      key: Key('story-scene-${scene.id}'),
+                      fit: BoxFit.cover,
+                      alignment: Alignment(
+                        visual.alignmentX,
+                        visual.alignmentY,
+                      ),
+                      cacheWidth: 1024,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (context, error, stack) =>
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: AgainColors.welcomeGradient,
+                            ),
+                            child: Center(
+                              child: Icon(Icons.image_not_supported_outlined),
+                            ),
+                          ),
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            AgainColors.night950.withValues(
+                              alpha: visual.overlayStrength,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ReadingPanel extends StatelessWidget {

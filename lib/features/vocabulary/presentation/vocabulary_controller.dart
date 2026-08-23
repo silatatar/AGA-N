@@ -4,9 +4,12 @@ import '../data/vocabulary_repository.dart';
 import '../domain/vocabulary_entry.dart';
 import '../../story/data/story_services.dart';
 import '../../story/domain/story_definition.dart';
+import '../../sync/application/data_ownership_provider.dart';
 
 final vocabularyRepositoryProvider = Provider<VocabularyRepository>(
-  (ref) => SharedPreferencesVocabularyRepository(),
+  (ref) => SharedPreferencesVocabularyRepository(
+    ownership: ref.watch(dataOwnershipStoreProvider),
+  ),
 );
 
 class VocabularyController extends AsyncNotifier<List<VocabularyEntry>> {

@@ -193,10 +193,14 @@ class _InteractiveStoryPlayerScreenState
                       ),
                       IconButton(
                         key: const Key('word-audio'),
-                        tooltip: 'Kelimeyi dinle',
-                        onPressed: () => ref
-                            .read(storyAudioServiceProvider)
-                            .playPhrase(word.word),
+                        tooltip: ref.watch(storyAudioAvailabilityProvider)
+                            ? 'Kelimeyi dinle'
+                            : 'Ses henüz kullanılamıyor',
+                        onPressed: ref.watch(storyAudioAvailabilityProvider)
+                            ? () => ref
+                                  .read(storyAudioServiceProvider)
+                                  .playPhrase(word.word)
+                            : null,
                         icon: const Icon(Icons.volume_up_rounded),
                       ),
                     ],
@@ -284,6 +288,7 @@ class _InteractiveStoryPlayerScreenState
 
   @override
   Widget build(BuildContext context) {
+    final audioAvailable = ref.watch(storyAudioAvailabilityProvider);
     if (_stage == 3) return _completion(context);
     return Scaffold(
       backgroundColor: AgainColors.night950,
@@ -347,7 +352,7 @@ class _InteractiveStoryPlayerScreenState
                   duration: MediaQuery.disableAnimationsOf(context)
                       ? Duration.zero
                       : AgainDurations.page,
-                  child: _stageContent(context),
+                  child: _stageContent(context, audioAvailable),
                 ),
               ],
             ),
@@ -357,7 +362,10 @@ class _InteractiveStoryPlayerScreenState
     );
   }
 
-  Widget _stageContent(BuildContext context) => switch (_stage) {
+  Widget _stageContent(
+    BuildContext context,
+    bool audioAvailable,
+  ) => switch (_stage) {
     0 => AgainCard(
       key: const ValueKey('narrative'),
       child: Column(
@@ -416,14 +424,14 @@ class _InteractiveStoryPlayerScreenState
                 child: AgainSecondaryButton(
                   key: const Key('audio-play-pause'),
                   label: _playing ? 'Duraklat' : 'Dinle',
-                  onPressed: _toggleAudio,
+                  onPressed: audioAvailable ? _toggleAudio : null,
                 ),
               ),
               const SizedBox(width: AgainSpacing.sm),
               IconButton.outlined(
                 key: const Key('replay-sentence'),
                 tooltip: 'Cümleyi yeniden dinle',
-                onPressed: _replay,
+                onPressed: audioAvailable ? _replay : null,
                 icon: const Icon(Icons.replay_rounded),
               ),
             ],

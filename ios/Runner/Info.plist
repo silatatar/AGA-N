@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AGAIN, yalnızca başlattığınız İngilizce konuşma etkinliklerinde sesinizi kaydetmek için mikrofon erişimi ister.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AGAIN, kısa İngilizce ifadelerinizi yazıya dönüştürmek için konuşma tanıma erişimi ister.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

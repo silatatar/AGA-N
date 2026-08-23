@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/onboarding_preferences_repository.dart';
 import '../domain/onboarding_preferences.dart';
+import '../../sync/application/data_ownership_provider.dart';
 
 final onboardingRepositoryProvider = Provider<OnboardingPreferencesRepository>(
-  (ref) => SharedPreferencesOnboardingRepository(),
+  (ref) => SharedPreferencesOnboardingRepository(
+    ownership: ref.watch(dataOwnershipStoreProvider),
+  ),
 );
 
 class OnboardingController extends AsyncNotifier<OnboardingPreferences> {

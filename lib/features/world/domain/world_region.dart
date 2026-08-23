@@ -50,9 +50,24 @@ WorldRegion? regionBySlug(String slug) {
 }
 
 List<WorldRegion> worldRegionsFrom(AgainProgress progress) => [
-  _derived(worldRegions[0], progress, const ['first-encounter']),
-  _derived(worldRegions[1], progress, const []),
-  _derived(worldRegions[2], progress, const ['hava-durumu']),
+  _derived(worldRegions[0], progress, const [
+    'first-encounter',
+    'ben-kimim',
+    'gunluk-hayat',
+    'sevdigim-seyler',
+    'kucuk-bir-gun',
+  ]),
+  _derived(worldRegions[1], progress, const [
+    'ormana-giris',
+    'kaybolan-yol',
+    'gece-sesleri',
+  ]),
+  _derived(worldRegions[2], progress, const [
+    'duygular',
+    'hava-durumu',
+    'ulasim-araclari',
+    'yolculuk-hazirligi',
+  ]),
 ];
 
 WorldRegion _derived(

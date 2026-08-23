@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/progression_repository.dart';
 import '../domain/again_progress.dart';
+import '../../sync/application/data_ownership_provider.dart';
 
 final progressionRepositoryProvider = Provider<ProgressionRepository>(
-  (ref) => SharedPreferencesProgressionRepository(),
+  (ref) => SharedPreferencesProgressionRepository(
+    ownership: ref.watch(dataOwnershipStoreProvider),
+  ),
 );
 
 final progressionProvider =

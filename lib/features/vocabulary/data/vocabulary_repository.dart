@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../../sync/data/local_key_value_store.dart';
+import '../../sync/domain/data_ownership.dart';
 import '../domain/vocabulary_entry.dart';
 
 abstract interface class VocabularyRepository {
@@ -12,15 +12,28 @@ abstract interface class VocabularyRepository {
 }
 
 class SharedPreferencesVocabularyRepository implements VocabularyRepository {
-  SharedPreferencesVocabularyRepository({SharedPreferencesAsync? preferences})
-    : _preferences = preferences ?? SharedPreferencesAsync();
-  static const _key = 'again.vocabulary_entries';
+  SharedPreferencesVocabularyRepository({
+    LocalKeyValueStore? store,
+    this.ownership,
+  }) : _store = store ?? SharedPreferencesLocalKeyValueStore();
+  static const storageKey = 'again.vocabulary_entries';
   static const schemaVersion = 2;
-  final SharedPreferencesAsync _preferences;
+  final LocalKeyValueStore _store;
+  final DataOwnershipStore? ownership;
+
+  Future<String> _key() async => ownership == null
+      ? storageKey
+      : (await ownership!.current()).storageKey(storageKey);
 
   @override
   Future<List<VocabularyEntry>> readAll() async {
-    final raw = await _preferences.getString(_key);
+    final owner = ownership == null ? null : await ownership!.current();
+    final scopedKey = await _key();
+    var raw = await _store.getString(scopedKey);
+    if (raw == null && owner?.kind == DataOwnerKind.guest) {
+      raw = await _store.getString(storageKey);
+      if (raw != null) await _store.setString(scopedKey, raw);
+    }
     if (raw == null) return [];
     final decoded = jsonDecode(raw);
     final list = decoded is List<dynamic>
@@ -54,8 +67,8 @@ class SharedPreferencesVocabularyRepository implements VocabularyRepository {
     await _write(entries);
   }
 
-  Future<void> _write(List<VocabularyEntry> entries) => _preferences.setString(
-    _key,
+  Future<void> _write(List<VocabularyEntry> entries) async => _store.setString(
+    await _key(),
     jsonEncode({
       'version': schemaVersion,
       'entries': entries.map((entry) => entry.toJson()).toList(),

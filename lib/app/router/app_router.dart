@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,11 +14,10 @@ import '../../features/learner_profile/presentation/learner_profile_selection_sc
 import '../../features/learner_profile/presentation/profile_name_setup_screen.dart';
 import '../../features/onboarding/presentation/personalised_onboarding_screen.dart';
 import '../../features/story/presentation/data_driven_story_player_screen.dart';
+import '../../features/story/presentation/story_entry_gate.dart';
 import '../../features/story_square/presentation/story_square_screen.dart';
 import '../../features/tasks/presentation/daily_tasks_screen.dart';
 import '../../features/world/domain/world_region.dart';
-import '../../features/world/domain/world_chapter.dart';
-import '../../features/world/presentation/chapter_intro_placeholder_screen.dart';
 import '../../features/world/presentation/world_detail_screen.dart';
 import '../../features/world/presentation/world_map_screen.dart';
 import '../../features/vocabulary/domain/vocabulary_entry.dart';
@@ -27,7 +27,9 @@ import '../../features/vocabulary/presentation/word_detail_screen.dart';
 import '../../features/opening/presentation/flutter_splash_screen.dart';
 import '../../features/opening/presentation/huma_arrival_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
-import '../../features/progression/presentation/progression_controller.dart';
+import '../../features/startup/startup_decision.dart';
+import '../../features/sync/application/data_ownership_provider.dart';
+import 'route_access_policy.dart';
 
 abstract final class AppRoutes {
   static const designSystem = 'designSystem';
@@ -88,9 +90,33 @@ abstract final class AppRoutes {
   static const chapterIntroPath = '/world/:slug/chapter/:chapterId';
 }
 
-final appRouterProvider = Provider<GoRouter>(
-  (ref) => GoRouter(
+final routerAccessSnapshotProvider = FutureProvider<RouterAccessSnapshot>((
+  ref,
+) async {
+  final startup = await ref.watch(startupControllerProvider.future);
+  final owner = await ref.read(dataOwnershipStoreProvider).current();
+  return RouterAccessSnapshot.ready(
+    session: startup.auth,
+    onboardingComplete: startup.onboardingComplete,
+    ownerNamespace: owner.namespace,
+  );
+});
+
+final appRouterProvider = Provider<GoRouter>((ref) {
+  final refresh = RouterAccessRefreshBridge();
+  ref
+    ..listen(
+      routerAccessSnapshotProvider,
+      (_, next) => refresh.update(next),
+      fireImmediately: true,
+    )
+    ..onDispose(refresh.dispose);
+  return GoRouter(
     initialLocation: AppRoutes.splashPath,
+    refreshListenable: refresh,
+    redirect: (context, state) {
+      return refresh.redirect(state.uri.path);
+    },
     routes: [
       GoRoute(
         name: AppRoutes.home,
@@ -243,19 +269,9 @@ final appRouterProvider = Provider<GoRouter>(
         builder: (context, state) {
           final region = regionBySlug(state.pathParameters['slug'] ?? '');
           final chapterId = state.pathParameters['chapterId'] ?? '';
-          final progress = ref.read(progressionProvider).value;
-          final chapter = progress == null
-              ? denizChapterById(chapterId)
-              : denizChaptersFrom(
-                  progress,
-                ).where((c) => c.id == chapterId).firstOrNull;
-          return region == null || chapter == null
+          return region == null
               ? const NotFoundScreen()
-              : chapter.state == ChapterState.locked
-              ? const NotFoundScreen()
-              : chapter.id == 'hava-durumu'
-              ? const DataDrivenStoryPlayerScreen(storyId: 'weather-storm')
-              : ChapterIntroPlaceholderScreen(region: region, chapter: chapter);
+              : StoryEntryGate(region: region, chapterId: chapterId);
         },
       ),
       GoRoute(
@@ -275,5 +291,32 @@ final appRouterProvider = Provider<GoRouter>(
       ),
     ],
     errorBuilder: (context, state) => const NotFoundScreen(),
-  ),
-);
+  );
+});
+
+/// Exactly one controlled reactive bridge refreshes GoRouter. Equal snapshots
+/// do not churn the router or create redirect loops.
+class RouterAccessRefreshBridge extends ChangeNotifier {
+  RouterAccessSnapshot _snapshot = const RouterAccessSnapshot.loading();
+  String? _pendingLocation;
+
+  RouterAccessSnapshot get snapshot => _snapshot;
+  String? get pendingLocation => _pendingLocation;
+
+  String? redirect(String path) {
+    final decision = RouteAccessPolicy.decide(
+      path: path,
+      snapshot: _snapshot,
+      pendingLocation: _pendingLocation,
+    );
+    _pendingLocation = decision.pendingLocation;
+    return decision.redirect;
+  }
+
+  void update(AsyncValue<RouterAccessSnapshot> value) {
+    final next = value.value ?? const RouterAccessSnapshot.loading();
+    if (next == _snapshot) return;
+    _snapshot = next;
+    notifyListeners();
+  }
+}

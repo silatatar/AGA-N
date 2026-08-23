@@ -1,5 +1,6 @@
 import '../../learner_profile/domain/learner_profile.dart';
 import '../../learner_profile/domain/learner_type.dart';
+import '../../onboarding/domain/onboarding_preferences.dart';
 
 class ProfileStatistic {
   const ProfileStatistic({required this.label, required this.value});
@@ -50,6 +51,7 @@ class ProfileProgress {
     required this.collections,
     required this.badges,
     required this.growth,
+    required this.preferences,
   });
 
   final LearnerProfile? profile;
@@ -63,4 +65,5 @@ class ProfileProgress {
   final List<ProfileCollectionItem> collections;
   final List<ProfileBadge> badges;
   final ProfileGrowth growth;
+  final OnboardingPreferences preferences;
 }

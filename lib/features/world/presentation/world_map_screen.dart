@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/again_tokens.dart';
-import '../../../core/widgets/again_components.dart';
 import '../../../core/widgets/again_navigation.dart';
 import '../../learner_profile/presentation/learner_profile_controller.dart';
 import '../../huma/application/huma_context_provider.dart';
@@ -15,6 +14,7 @@ import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../progression/domain/again_progress.dart';
 import '../../progression/presentation/progression_controller.dart';
 import '../domain/world_region.dart';
+import '../domain/world_visual_profile.dart';
 
 /// Phase 19 temporary atlas art. Replace the image layer without changing
 /// normalized node coordinates or progression-connected widgets.
@@ -190,12 +190,15 @@ class WorldMapCanvas extends StatelessWidget {
           children: [
             Positioned.fill(
               child: Image.asset(
-                'assets/images/worlds/shared/world_map_atlas_placeholder.webp',
+                WorldMapAssets.baseAtlas,
                 fit: BoxFit.cover,
                 cacheWidth: 1024,
                 filterQuality: FilterQuality.medium,
               ),
             ),
+            const Positioned.fill(child: _LifeValleyEnvironmentLayer()),
+            const Positioned.fill(child: _SilentForestEnvironmentLayer()),
+            const Positioned.fill(child: _SeaKingdomEnvironmentLayer()),
             const Positioned.fill(child: CustomPaint(painter: _DepthPainter())),
             Positioned.fill(
               child: CustomPaint(
@@ -223,6 +226,115 @@ class WorldMapCanvas extends StatelessWidget {
       ),
     );
   }
+}
+
+class _LifeValleyEnvironmentLayer extends StatelessWidget {
+  const _LifeValleyEnvironmentLayer();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: FractionallySizedBox(
+        heightFactor: .34,
+        widthFactor: 1,
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.white, Colors.white, Colors.transparent],
+            stops: [0, .72, 1],
+          ).createShader(bounds),
+          child: RepaintBoundary(
+            child: Image.asset(
+              WorldVisualProfiles.lifeValley.mapEnvironmentAsset!,
+              fit: BoxFit.cover,
+              alignment: const Alignment(0, .25),
+              cacheWidth: 1024,
+              filterQuality: FilterQuality.medium,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SilentForestEnvironmentLayer extends StatelessWidget {
+  const _SilentForestEnvironmentLayer();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Align(
+      alignment: Alignment.center,
+      child: FractionallySizedBox(
+        heightFactor: .38,
+        widthFactor: 1,
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: [0, .16, .84, 1],
+          ).createShader(bounds),
+          child: RepaintBoundary(
+            child: Image.asset(
+              WorldVisualProfiles.silentForest.mapEnvironmentAsset!,
+              fit: BoxFit.cover,
+              alignment: const Alignment(0, .42),
+              cacheWidth: 1024,
+              filterQuality: FilterQuality.medium,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SeaKingdomEnvironmentLayer extends StatelessWidget {
+  const _SeaKingdomEnvironmentLayer();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Align(
+      alignment: const Alignment(0, .72),
+      child: FractionallySizedBox(
+        heightFactor: .36,
+        widthFactor: 1,
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: [0, .14, .86, 1],
+          ).createShader(bounds),
+          child: RepaintBoundary(
+            child: Image.asset(
+              WorldVisualProfiles.seaKingdom.mapEnvironmentAsset!,
+              fit: BoxFit.cover,
+              alignment: const Alignment(-.12, .48),
+              cacheWidth: 1024,
+              filterQuality: FilterQuality.medium,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 @visibleForTesting
@@ -388,16 +500,24 @@ class _WorldNodeState extends State<_WorldNode> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
+                            Icon(
+                              _stateIcon(widget.region.state),
+                              size: 13,
+                              color: _accent(widget.region),
+                            ),
+                            const SizedBox(width: 4),
                             Expanded(
-                              child: LinearProgressIndicator(
-                                value: widget.region.progress,
-                                minHeight: 4,
-                                borderRadius: BorderRadius.circular(99),
-                                color: _accent(widget.region),
-                                backgroundColor: AgainColors.night700,
+                              child: Text(
+                                _label(widget.region.state),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: _accent(widget.region),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 7),
                             Text(
                               '%${(widget.region.progress * 100).round()}',
                               style: const TextStyle(
@@ -406,6 +526,14 @@ class _WorldNodeState extends State<_WorldNode> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 5),
+                        LinearProgressIndicator(
+                          value: widget.region.progress,
+                          minHeight: 4,
+                          borderRadius: BorderRadius.circular(99),
+                          color: _accent(widget.region),
+                          backgroundColor: AgainColors.night700,
                         ),
                       ],
                     ),
@@ -447,6 +575,13 @@ class _WorldNodeState extends State<_WorldNode> {
     WorldRegionState.current => AgainColors.turquoise300,
     WorldRegionState.available => AgainColors.gold400,
     WorldRegionState.locked => AgainColors.purple200,
+  };
+
+  static IconData _stateIcon(WorldRegionState state) => switch (state) {
+    WorldRegionState.completed => Icons.check_rounded,
+    WorldRegionState.current => Icons.navigation_rounded,
+    WorldRegionState.available => Icons.auto_awesome_rounded,
+    WorldRegionState.locked => Icons.lock_outline_rounded,
   };
 }
 
@@ -532,7 +667,22 @@ class _HumaGuide extends ConsumerWidget {
           width: math.min(MediaQuery.sizeOf(context).width * .48, 190),
           child: Column(
             children: [
-              const HumaAvatar(size: 76),
+              Semantics(
+                image: true,
+                label: 'Rehber Hüma',
+                child: Container(
+                  height: 92,
+                  decoration: const BoxDecoration(
+                    boxShadow: AgainShadows.magicalGlow,
+                  ),
+                  child: Image.asset(
+                    'assets/images/huma.png',
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomCenter,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                ),
+              ),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -686,6 +836,31 @@ class _DepthPainter extends CustomPainter {
   const _DepthPainter();
   @override
   void paint(Canvas c, Size s) {
+    void glow(Offset center, double radius, Color color) {
+      c.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [color.withValues(alpha: .24), Colors.transparent],
+          ).createShader(Rect.fromCircle(center: center, radius: radius)),
+      );
+    }
+
+    final valley = WorldVisualProfiles.lifeValley;
+    final forest = WorldVisualProfiles.silentForest;
+    final sea = WorldVisualProfiles.seaKingdom;
+    glow(
+      Offset(s.width * .25, s.height * .17),
+      s.width * .43,
+      valley.ambientGlow,
+    );
+    glow(
+      Offset(s.width * .68, s.height * .45),
+      s.width * .4,
+      forest.ambientGlow,
+    );
+    glow(Offset(s.width * .3, s.height * .73), s.width * .46, sea.ambientGlow);
     c.drawRect(
       Offset.zero & s,
       Paint()
@@ -693,10 +868,22 @@ class _DepthPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AgainColors.night950.withValues(alpha: .05),
+            AgainColors.night950.withValues(alpha: .26),
             Colors.transparent,
-            AgainColors.night950.withValues(alpha: .35),
+            AgainColors.night950.withValues(alpha: .58),
           ],
+        ).createShader(Offset.zero & s),
+    );
+    c.drawRect(
+      Offset.zero & s,
+      Paint()
+        ..shader = RadialGradient(
+          radius: .78,
+          colors: [
+            Colors.transparent,
+            AgainColors.night950.withValues(alpha: .54),
+          ],
+          stops: const [.55, 1],
         ).createShader(Offset.zero & s),
     );
   }

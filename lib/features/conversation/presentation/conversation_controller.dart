@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/conversation_repository.dart';
 import '../domain/conversation_models.dart';
 import '../../learner_profile/domain/learner_type.dart';
-import '../../learner_profile/presentation/learner_selection_controller.dart';
-import '../../onboarding/presentation/onboarding_controller.dart';
+import '../../learner_profile/presentation/learner_personalization_provider.dart';
 
 final humaConversationServiceProvider = Provider<HumaConversationService>(
   (ref) => LocalHumaConversationService(),
@@ -23,13 +22,9 @@ class ConversationController extends Notifier<ConversationSession?> {
   ConversationSession? build() => null;
 
   void start(ConversationScenario scenario, ConversationMode mode) {
-    final effectiveMode =
-        ref.read(humaConversationServiceProvider).supportsVoice
-        ? mode
-        : ConversationMode.text;
     state = ConversationSession(
       scenario: scenario,
-      mode: effectiveMode,
+      mode: mode,
       messages: const [
         ConversationMessage(
           id: 'huma-0',
@@ -62,8 +57,9 @@ class ConversationController extends Notifier<ConversationSession?> {
       suggestions: const [],
       isTyping: true,
     );
-    final learnerType = ref.read(learnerSelectionProvider).value;
-    final onboarding = ref.read(onboardingProvider).value;
+    final personalization = ref.read(learnerPersonalizationProvider).value;
+    final learnerType = personalization?.learnerType;
+    final onboarding = personalization?.preferences;
     final request = HumaConversationRequest(
       userMessage: text,
       learnerLevel: onboarding?.level?.name ?? 'unspecified',

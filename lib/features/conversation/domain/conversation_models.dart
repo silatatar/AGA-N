@@ -81,6 +81,52 @@ class HumaConversationResponse {
   final Map<String, String> sessionMetadata;
 }
 
+class HumaSessionStartRequest {
+  const HumaSessionStartRequest({
+    required this.sessionId,
+    required this.learnerType,
+    required this.learnerLevel,
+    required this.scenario,
+    required this.safetyProfile,
+    this.targetVocabulary = const [],
+  });
+
+  final String sessionId;
+  final String learnerType;
+  final String learnerLevel;
+  final ConversationScenario scenario;
+  final HumaSafetyProfile safetyProfile;
+  final List<String> targetVocabulary;
+}
+
+class HumaSessionHandle {
+  const HumaSessionHandle({
+    required this.sessionId,
+    required this.interactionMode,
+    required this.startedAt,
+  });
+
+  final String sessionId;
+  final String interactionMode;
+  final DateTime startedAt;
+}
+
+class HumaStructuredCorrection {
+  const HumaStructuredCorrection({
+    required this.original,
+    required this.suggestion,
+    required this.category,
+    required this.shortExplanation,
+    this.severity = 1,
+  });
+
+  final String original;
+  final String suggestion;
+  final CorrectionKind category;
+  final String shortExplanation;
+  final int severity;
+}
+
 class ConversationMessage {
   const ConversationMessage({
     required this.id,

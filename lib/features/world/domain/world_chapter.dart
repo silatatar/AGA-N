@@ -1,4 +1,5 @@
 import '../../progression/domain/again_progress.dart';
+import '../../story/domain/story_catalog.dart';
 
 enum ChapterState { completed, current, available, locked, comingSoon }
 
@@ -13,8 +14,12 @@ class WorldChapter {
     required this.hasListening,
     required this.hasSpeaking,
     required this.state,
+    this.hasPlayableContent = false,
     this.isDownloaded = false,
     this.isPremium = false,
+    this.coverAsset,
+    this.coverAlignmentX = 0,
+    this.coverAlignmentY = 0,
   });
 
   final String id;
@@ -28,8 +33,9 @@ class WorldChapter {
   final ChapterState state;
   final bool isDownloaded;
   final bool isPremium;
-
-  bool get hasPlayableContent => id == 'hava-durumu';
+  final bool hasPlayableContent;
+  final String? coverAsset;
+  final double coverAlignmentX, coverAlignmentY;
 
   bool get isSelectable =>
       hasPlayableContent &&
@@ -48,6 +54,7 @@ const denizKralligiChapters = [
     hasListening: true,
     hasSpeaking: true,
     state: ChapterState.comingSoon,
+    hasPlayableContent: true,
     isDownloaded: true,
   ),
   WorldChapter(
@@ -60,6 +67,7 @@ const denizKralligiChapters = [
     hasListening: true,
     hasSpeaking: true,
     state: ChapterState.current,
+    hasPlayableContent: true,
   ),
   WorldChapter(
     id: 'ulasim-araclari',
@@ -71,6 +79,7 @@ const denizKralligiChapters = [
     hasListening: true,
     hasSpeaking: false,
     state: ChapterState.comingSoon,
+    hasPlayableContent: true,
   ),
   WorldChapter(
     id: 'yolculuk-hazirligi',
@@ -82,6 +91,7 @@ const denizKralligiChapters = [
     hasListening: true,
     hasSpeaking: true,
     state: ChapterState.comingSoon,
+    hasPlayableContent: true,
   ),
   WorldChapter(
     id: 'seyahat-plani',
@@ -127,6 +137,7 @@ List<WorldChapter> denizChaptersFrom(AgainProgress progress) => [
       hasSpeaking: chapter.hasSpeaking,
       isDownloaded: chapter.isDownloaded,
       isPremium: chapter.isPremium,
+      hasPlayableContent: chapter.hasPlayableContent,
       state: !chapter.hasPlayableContent
           ? ChapterState.comingSoon
           : progress.completedChapterIds.contains(chapter.id)
@@ -134,6 +145,43 @@ List<WorldChapter> denizChaptersFrom(AgainProgress progress) => [
           : progress.currentChapterId == chapter.id
           ? ChapterState.current
           : progress.unlockedChapterIds.contains(chapter.id)
+          ? ChapterState.available
+          : ChapterState.locked,
+    ),
+];
+
+List<WorldChapter> catalogChaptersForWorld(
+  StoryCatalog catalog,
+  String worldId,
+  AgainProgress progress,
+) => [
+  for (final story in catalog.byWorld(worldId))
+    WorldChapter(
+      id: story.chapter.id,
+      number: story.chapter.number,
+      title:
+          story.chapter.displayTitle ??
+          (story.title.contains('—')
+              ? story.title.split('—').last.trim()
+              : story.title),
+      level: switch (story.learning?.cefr.name) {
+        'a1Plus' => 'A1+',
+        'a2' => 'A2',
+        _ => 'A1',
+      },
+      durationMinutes: story.chapter.durationMinutes,
+      vocabularyCount: story.chapter.vocabularyCount,
+      hasListening: story.chapter.hasListening,
+      hasSpeaking: story.chapter.hasSpeaking,
+      hasPlayableContent: true,
+      coverAsset: story.coverVisual?.assetPath,
+      coverAlignmentX: story.coverVisual?.alignmentX ?? 0,
+      coverAlignmentY: story.coverVisual?.alignmentY ?? 0,
+      state: progress.completedChapterIds.contains(story.chapter.id)
+          ? ChapterState.completed
+          : progress.currentChapterId == story.chapter.id
+          ? ChapterState.current
+          : progress.unlockedChapterIds.contains(story.chapter.id)
           ? ChapterState.available
           : ChapterState.locked,
     ),

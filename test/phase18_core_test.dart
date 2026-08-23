@@ -2,6 +2,7 @@ import 'package:again/features/learner_profile/domain/learner_type.dart';
 import 'package:again/features/progression/data/progression_repository.dart';
 import 'package:again/features/progression/domain/again_progress.dart';
 import 'package:again/features/startup/startup_decision.dart';
+import 'package:again/features/auth/domain/auth_session.dart';
 import 'package:again/features/story/data/story_repository.dart';
 import 'package:again/features/story/domain/story_definition.dart';
 import 'package:again/features/world/domain/world_chapter.dart';
@@ -72,8 +73,8 @@ void main() {
     });
   });
   group('startup decision', () {
-    const none = AuthSession(AuthSessionKind.unauthenticated),
-        guest = AuthSession(AuthSessionKind.guest);
+    const none = AuthSession(status: AuthStatus.unauthenticated),
+        guest = AuthSession(status: AuthStatus.guest);
     test(
       '1 new user',
       () => expect(
@@ -140,10 +141,25 @@ void main() {
       ),
     );
     test(
-      '6 development auth is explicit',
+      '6 verification-required session is explicit',
       () => expect(
-        const AuthSession(AuthSessionKind.developmentAuthenticated).kind,
-        AuthSessionKind.developmentAuthenticated,
+        const AuthSession(status: AuthStatus.emailVerificationRequired).status,
+        AuthStatus.emailVerificationRequired,
+      ),
+    );
+    test(
+      '6b verification-required startup routes to verification',
+      () => expect(
+        decideStartup(
+          hasLearnerType: true,
+          hasProfile: true,
+          onboardingComplete: true,
+          answersComplete: true,
+          session: const AuthSession(
+            status: AuthStatus.emailVerificationRequired,
+          ),
+        ),
+        StartupDestination.emailVerification,
       ),
     );
   });
@@ -163,13 +179,20 @@ void main() {
     test(
       '9 world query',
       () async =>
-          expect(await repo.getStoriesForWorld('deniz-kralligi'), hasLength(1)),
+          expect(await repo.getStoriesForWorld('deniz-kralligi'), hasLength(4)),
     );
     test(
       '10 chapter query',
       () async => expect(
-        (await repo.getChaptersForWorld('deniz-kralligi')).single.id,
-        'hava-durumu',
+        (await repo.getChaptersForWorld(
+          'deniz-kralligi',
+        )).map((chapter) => chapter.id),
+        containsAll({
+          'duygular',
+          'hava-durumu',
+          'ulasim-araclari',
+          'yolculuk-hazirligi',
+        }),
       ),
     );
     test('11 real branch paths differ', () async {
@@ -244,9 +267,10 @@ void main() {
       final p = const AgainProgress().apply(first()).apply(weather());
       expect(p.worldProgress(const ['hava-durumu']), 100);
     });
-    test('21 world completed derivation', () {
+    test('21 partially completed world remains current', () {
       final p = const AgainProgress().apply(first()).apply(weather());
-      expect(worldRegionsFrom(p).last.state, WorldRegionState.completed);
+      expect(worldRegionsFrom(p).last.state, WorldRegionState.current);
+      expect(worldRegionsFrom(p).last.progress, .25);
     });
     test('22 chapter completed derivation', () {
       final p = const AgainProgress().apply(first()).apply(weather());

@@ -10,6 +10,10 @@ import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../opening/presentation/opening_atmosphere.dart';
 import '../../huma/presentation/huma_components.dart';
 import '../../story/data/story_services.dart';
+import '../../voice/application/voice_providers.dart';
+import '../../voice/application/voice_user_action_controller.dart';
+import '../../voice/domain/voice_models.dart';
+import '../../voice/domain/voice_transcript.dart';
 import '../domain/conversation_models.dart';
 import 'conversation_controller.dart';
 
@@ -27,6 +31,10 @@ class _HumaConversationEntryScreenState
   @override
   Widget build(BuildContext context) {
     final level = ref.watch(onboardingProvider).value?.level;
+    final voiceCapability = ref.watch(voiceCapabilitiesProvider).speechToText;
+    final voiceCanBeRequested =
+        voiceCapability == VoiceAvailability.available ||
+        voiceCapability == VoiceAvailability.permissionRequired;
     return Scaffold(
       body: OpeningAtmosphere(
         child: SafeArea(
@@ -65,17 +73,21 @@ class _HumaConversationEntryScreenState
                                 label: Text('Seviye: ${_levelLabel(level)}'),
                               ),
                               SegmentedButton<ConversationMode>(
-                                segments: const [
-                                  ButtonSegment(
+                                segments: [
+                                  const ButtonSegment(
                                     value: ConversationMode.text,
                                     icon: Icon(Icons.keyboard_outlined),
                                     label: Text('Metin'),
                                   ),
                                   ButtonSegment(
                                     value: ConversationMode.voice,
-                                    icon: Icon(Icons.mic_none),
-                                    label: Text('Ses yakında'),
-                                    enabled: false,
+                                    icon: const Icon(Icons.mic_none),
+                                    label: Text(
+                                      voiceCanBeRequested
+                                          ? 'Ses'
+                                          : 'Ses kullanılamıyor',
+                                    ),
+                                    enabled: voiceCanBeRequested,
                                   ),
                                 ],
                                 selected: {_mode},
@@ -173,9 +185,11 @@ class _HumaConversationChatScreenState
     extends ConsumerState<HumaConversationChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  VoiceUserActionController? _voice;
 
   @override
   void dispose() {
+    _voice?.dispose();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -194,6 +208,11 @@ class _HumaConversationChatScreenState
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(conversationProvider);
+    final runtime = ref.watch(voicePlatformRuntimeProvider).value;
+    if (_voice == null && runtime != null) {
+      _voice = VoiceUserActionController(speechToText: runtime.speechToText)
+        ..addListener(_voiceChanged);
+    }
     ref.listen(conversationProvider, (_, next) => _scrollDown());
     if (session == null) {
       return Scaffold(
@@ -264,6 +283,8 @@ class _HumaConversationChatScreenState
                   controller: _controller,
                   mode: session.mode,
                   enabled: !session.isTyping,
+                  voiceState: _voice?.state ?? VoiceUserActionState.unavailable,
+                  onVoice: _voice == null ? null : _startVoiceInput,
                 ),
               ],
             ),
@@ -271,6 +292,92 @@ class _HumaConversationChatScreenState
         ),
       ),
     );
+  }
+
+  void _voiceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _startVoiceInput() async {
+    final voice = _voice;
+    if (voice == null || voice.isBusy) return;
+    final review = await voice.startLiveRecognition();
+    if (!mounted) return;
+    if (review == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sesli giriş tamamlanamadı. Yazılı olarak devam edebilirsin.',
+          ),
+        ),
+      );
+      return;
+    }
+    await _showTranscriptReview(review);
+  }
+
+  Future<void> _showTranscriptReview(VoiceTranscriptReview initial) async {
+    final textController = TextEditingController(
+      text: initial.currentTranscript,
+    );
+    var review = initial;
+    final submitted = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Söylediğini kontrol et'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('voice-transcript-field'),
+                controller: textController,
+                onChanged: (value) =>
+                    setDialogState(() => review = review.edit(value)),
+              ),
+              if (review.wasEdited)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Metni düzenledin.'),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('İptal'),
+            ),
+            TextButton(
+              key: const Key('voice-retry'),
+              onPressed: () => Navigator.pop(dialogContext, ''),
+              child: const Text('Tekrar Söyle'),
+            ),
+            FilledButton(
+              key: const Key('voice-submit'),
+              onPressed: textController.text.trim().isEmpty
+                  ? null
+                  : () {
+                      review = review.edit(textController.text).confirm();
+                      Navigator.pop(dialogContext, review.currentTranscript);
+                    },
+              child: const Text('Gönder'),
+            ),
+          ],
+        ),
+      ),
+    );
+    textController.dispose();
+    if (!mounted) return;
+    if (submitted == '') {
+      _voice?.complete();
+      await _startVoiceInput();
+    } else if (submitted != null && submitted.trim().isNotEmpty) {
+      await ref.read(conversationProvider.notifier).send(submitted);
+      _voice?.complete();
+    } else {
+      await _voice?.cancel();
+    }
   }
 }
 
@@ -281,6 +388,7 @@ class _MessageBubble extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isUser = message.author == ConversationAuthor.user;
     final isSystem = message.author == ConversationAuthor.system;
+    final audioAvailable = ref.watch(storyAudioAvailabilityProvider);
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
@@ -342,10 +450,14 @@ class _MessageBubble extends ConsumerWidget {
                           ),
                           IconButton(
                             key: Key('replay-${message.id}'),
-                            tooltip: 'Cümleyi tekrar oynat',
-                            onPressed: () => ref
-                                .read(storyAudioServiceProvider)
-                                .replayPhrase(message.text),
+                            tooltip: audioAvailable
+                                ? 'Cümleyi tekrar oynat'
+                                : 'Ses henüz kullanılamıyor',
+                            onPressed: audioAvailable
+                                ? () => ref
+                                      .read(storyAudioServiceProvider)
+                                      .replayPhrase(message.text)
+                                : null,
                             icon: const Icon(Icons.volume_up_outlined),
                           ),
                         ],
@@ -393,10 +505,14 @@ class _Composer extends ConsumerWidget {
     required this.controller,
     required this.mode,
     required this.enabled,
+    required this.voiceState,
+    required this.onVoice,
   });
   final TextEditingController controller;
   final ConversationMode mode;
   final bool enabled;
+  final VoiceUserActionState voiceState;
+  final VoidCallback? onVoice;
   @override
   Widget build(BuildContext context, WidgetRef ref) => Material(
     color: Theme.of(context).colorScheme.surface,
@@ -409,15 +525,15 @@ class _Composer extends ConsumerWidget {
             if (mode == ConversationMode.voice)
               IconButton.filledTonal(
                 key: const Key('voice-placeholder'),
-                tooltip: 'Sesli konuşma',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Sesli giriş, güvenli ses servisi bağlandığında açılacak.',
-                    ),
-                  ),
+                tooltip: voiceState == VoiceUserActionState.listening
+                    ? 'Dinleniyor'
+                    : 'Sesli konuşma',
+                onPressed: enabled ? onVoice : null,
+                icon: Icon(
+                  voiceState == VoiceUserActionState.listening
+                      ? Icons.graphic_eq
+                      : Icons.mic_none,
                 ),
-                icon: const Icon(Icons.mic_none),
               ),
             Expanded(
               child: TextField(

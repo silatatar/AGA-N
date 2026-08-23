@@ -9,6 +9,9 @@ import '../../../core/widgets/again_navigation.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../learner_profile/domain/learner_profile.dart';
 import '../../learner_profile/domain/learner_type.dart';
+import '../../learner_profile/presentation/learner_personalization_provider.dart';
+import '../../onboarding/domain/onboarding_preferences.dart';
+import '../../onboarding/presentation/onboarding_controller.dart';
 import '../domain/profile_progress.dart';
 import 'profile_progress_controller.dart';
 
@@ -39,12 +42,12 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _ProfileContent extends StatelessWidget {
+class _ProfileContent extends ConsumerWidget {
   const _ProfileContent({required this.data});
   final ProfileProgress data;
 
   @override
-  Widget build(BuildContext context) => CustomScrollView(
+  Widget build(BuildContext context, WidgetRef ref) => CustomScrollView(
     slivers: [
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
@@ -66,6 +69,12 @@ class _ProfileContent extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   _ProfileHeader(data: data),
+                  const SizedBox(height: 24),
+                  _PreferencesCard(
+                    preferences: data.preferences,
+                    onEdit: () =>
+                        _editPreferences(context, ref, data.preferences),
+                  ),
                   const SizedBox(height: 24),
                   _SectionTitle(
                     title: 'İstatistikler',
@@ -98,6 +107,197 @@ class _ProfileContent extends StatelessWidget {
     ],
   );
 }
+
+Future<void> _editPreferences(
+  BuildContext context,
+  WidgetRef ref,
+  OnboardingPreferences preferences,
+) async {
+  final changed = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AgainColors.night800,
+    builder: (_) => _PreferenceEditor(initial: preferences),
+  );
+  if (changed != true) return;
+  ref.invalidate(learnerPersonalizationProvider);
+  ref.invalidate(profileProgressProvider);
+}
+
+class _PreferencesCard extends StatelessWidget {
+  const _PreferencesCard({required this.preferences, required this.onEdit});
+  final OnboardingPreferences preferences;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) => AgainCard(
+    key: const Key('profile-preferences'),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.tune_rounded, color: AgainColors.gold400),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Öğrenme Tercihleri',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            TextButton(onPressed: onEdit, child: const Text('Düzenle')),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text('Seviye: ${_preferenceLevel(preferences.level)}'),
+        Text(
+          preferences.dailyMinutes == null
+              ? 'Günlük hedef: Ayarlanmadı'
+              : 'Günlük hedef: ${preferences.dailyMinutes} dakika',
+          key: const Key('profile-daily-goal'),
+        ),
+        Text(
+          preferences.goals.isEmpty
+              ? 'Hedefler: Seçilmedi'
+              : 'Hedefler: ${preferences.goals.join(', ')}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          preferences.interests.isEmpty
+              ? 'İlgi alanları: Seçilmedi'
+              : 'İlgi alanları: ${preferences.interests.join(', ')}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    ),
+  );
+}
+
+class _PreferenceEditor extends ConsumerStatefulWidget {
+  const _PreferenceEditor({required this.initial});
+  final OnboardingPreferences initial;
+
+  @override
+  ConsumerState<_PreferenceEditor> createState() => _PreferenceEditorState();
+}
+
+class _PreferenceEditorState extends ConsumerState<_PreferenceEditor> {
+  late EnglishLevel? level = widget.initial.level;
+  late int? minutes = widget.initial.dailyMinutes;
+  late Set<String> goals = {...widget.initial.goals};
+  late Set<String> interests = {...widget.initial.interests};
+
+  Future<void> _save() async {
+    final controller = ref.read(onboardingProvider.notifier);
+    if (level case final selected?) {
+      await controller.setLevel(selected);
+    }
+    await controller.setGoals(goals);
+    await controller.setInterests(interests);
+    if (minutes case final selected?) {
+      await controller.setDailyMinutes(selected);
+    }
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Öğrenme tercihlerini düzenle',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<EnglishLevel>(
+            key: const Key('profile-edit-level'),
+            initialValue: level,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'İngilizce seviyesi'),
+            items: OnboardingOptions.levelLabels.entries
+                .map(
+                  (entry) => DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => level = value),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<int>(
+            key: const Key('profile-edit-daily-goal'),
+            initialValue: minutes,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Günlük hedef'),
+            items: OnboardingOptions.dailyMinutes
+                .map(
+                  (value) => DropdownMenuItem(
+                    value: value,
+                    child: Text('$value dakika'),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => minutes = value),
+          ),
+          const SizedBox(height: 18),
+          const Text('Hedefler'),
+          Wrap(
+            spacing: 8,
+            children: OnboardingOptions.goals
+                .map(
+                  (value) => FilterChip(
+                    label: Text(value),
+                    selected: goals.contains(value),
+                    onSelected: (selected) => setState(
+                      () => selected ? goals.add(value) : goals.remove(value),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 14),
+          const Text('İlgi alanları (isteğe bağlı)'),
+          Wrap(
+            spacing: 8,
+            children: OnboardingOptions.interests
+                .map(
+                  (value) => FilterChip(
+                    label: Text(value),
+                    selected: interests.contains(value),
+                    onSelected: (selected) => setState(
+                      () => selected
+                          ? interests.add(value)
+                          : interests.remove(value),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 20),
+          AgainPrimaryButton(
+            key: const Key('save-profile-preferences'),
+            label: 'Kaydet',
+            onPressed: _save,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+String _preferenceLevel(EnglishLevel? level) =>
+    level == null ? 'Ayarlanmadı' : OnboardingOptions.levelLabels[level]!;
 
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({required this.data});

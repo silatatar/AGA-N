@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../learner_profile/presentation/learner_profile_controller.dart';
-import '../../learner_profile/presentation/learner_selection_controller.dart';
+import '../../learner_profile/presentation/learner_personalization_provider.dart';
 import '../../onboarding/domain/onboarding_preferences.dart';
-import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../progression/presentation/progression_controller.dart';
 import '../../vocabulary/domain/vocabulary_entry.dart';
 import '../../vocabulary/presentation/vocabulary_controller.dart';
@@ -12,9 +10,12 @@ import '../domain/profile_progress.dart';
 final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
   ref,
 ) async {
-  final profile = await ref.watch(learnerProfileProvider.future);
-  final learnerType = await ref.watch(learnerSelectionProvider.future);
-  final onboarding = await ref.watch(onboardingProvider.future);
+  final personalization = await ref.watch(
+    learnerPersonalizationProvider.future,
+  );
+  final profile = personalization.identity;
+  final learnerType = personalization.learnerType;
+  final onboarding = personalization.preferences;
   final words = await ref.watch(vocabularyProvider.future);
   final progress = await ref.watch(progressionProvider.future);
 
@@ -119,6 +120,7 @@ final profileProgressProvider = FutureProvider.autoDispose<ProfileProgress>((
       nextMilestone: milestone,
       progress: growthProgress,
     ),
+    preferences: onboarding,
   );
 });
 

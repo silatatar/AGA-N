@@ -179,9 +179,13 @@ class _VocabularyReviewScreenState
         children: [
           IconButton.filledTonal(
             key: const Key('review-audio'),
-            tooltip: 'Kelimeyi dinle',
-            onPressed: () =>
-                ref.read(storyAudioServiceProvider).playPhrase(entry.word),
+            tooltip: ref.watch(storyAudioAvailabilityProvider)
+                ? 'Kelimeyi dinle'
+                : 'Ses henüz kullanılamıyor',
+            onPressed: ref.watch(storyAudioAvailabilityProvider)
+                ? () =>
+                      ref.read(storyAudioServiceProvider).playPhrase(entry.word)
+                : null,
             icon: const Icon(Icons.volume_up_rounded),
           ),
           const SizedBox(height: AgainSpacing.md),

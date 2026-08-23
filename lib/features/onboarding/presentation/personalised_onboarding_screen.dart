@@ -23,39 +23,6 @@ class _PersonalisedOnboardingScreenState
     extends ConsumerState<PersonalisedOnboardingScreen> {
   int _step = 0;
 
-  static const _goals = [
-    'Günlük konuşmak',
-    'Seyahat etmek',
-    'Film ve dizileri anlamak',
-    'İş hayatında kullanmak',
-    'Okul veya sınav',
-    'Yurt dışında yaşamak',
-    'Konuşma korkumu yenmek',
-    'Kendimi geliştirmek',
-  ];
-  static const _interests = [
-    'Mitoloji',
-    'Seyahat',
-    'Kültür',
-    'Tarih',
-    'Gizem',
-    'Fantastik',
-    'Sanat',
-    'Müzik',
-    'Sinema',
-    'Bilim',
-    'Teknoloji',
-    'Günlük yaşam',
-    'İş dünyası',
-  ];
-  static const _levelLabels = {
-    EnglishLevel.beginner: 'Yeni başlıyorum',
-    EnglishLevel.words: 'Biraz kelime biliyorum',
-    EnglishLevel.simpleSentences: 'Basit cümleleri anlayabiliyorum',
-    EnglishLevel.conversational: 'Konuşabiliyorum ama geliştirmek istiyorum',
-    EnglishLevel.placementTest: 'Seviyemi test et',
-  };
-
   bool _canContinue(OnboardingPreferences value) => switch (_step) {
     0 => value.goals.isNotEmpty,
     1 => value.level != null,
@@ -218,13 +185,13 @@ class _PersonalisedOnboardingScreenState
 
   Widget _stepBody(OnboardingPreferences value) => switch (_step) {
     0 => _MultiChoice(
-      values: _goals,
+      values: OnboardingOptions.goals,
       selected: value.goals,
       keyPrefix: 'goal',
       onChanged: ref.read(onboardingProvider.notifier).setGoals,
     ),
     1 => Column(
-      children: _levelLabels.entries
+      children: OnboardingOptions.levelLabels.entries
           .map(
             (entry) => _SingleChoice(
               key: Key('level-${entry.key.name}'),
@@ -240,13 +207,13 @@ class _PersonalisedOnboardingScreenState
           .toList(),
     ),
     2 => _MultiChoice(
-      values: _interests,
+      values: OnboardingOptions.interests,
       selected: value.interests,
       keyPrefix: 'interest',
       onChanged: ref.read(onboardingProvider.notifier).setInterests,
     ),
     _ => Column(
-      children: [5, 10, 15, 20, 30]
+      children: OnboardingOptions.dailyMinutes
           .map(
             (minutes) => _SingleChoice(
               key: Key('minutes-$minutes'),

@@ -8,12 +8,33 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
   final progress = await ref.watch(progressionProvider.future);
   final vocabulary = await ref.watch(vocabularyProvider.future);
   final hasWeatherStory = progress.completedChapterIds.contains('hava-durumu');
-  final hasFirstStory = progress.completedChapterIds.contains(
+  const valleyChapterIds = [
     'first-encounter',
-  );
+    'ben-kimim',
+    'gunluk-hayat',
+    'sevdigim-seyler',
+    'kucuk-bir-gun',
+  ];
+  final completedValleyChapters = valleyChapterIds
+      .where(progress.completedChapterIds.contains)
+      .toList();
+  final hasFirstStory = completedValleyChapters.isNotEmpty;
   final valleyUnlocked = progress.unlockedWorldIds.contains('yasam-vadisi');
   final forestUnlocked = progress.unlockedWorldIds.contains('sessiz-orman');
   final seaUnlocked = progress.unlockedWorldIds.contains('deniz-kralligi');
+  const forestChapterIds = ['ormana-giris', 'kaybolan-yol', 'gece-sesleri'];
+  const seaChapterIds = [
+    'duygular',
+    'hava-durumu',
+    'ulasim-araclari',
+    'yolculuk-hazirligi',
+  ];
+  final completedForestChapters = forestChapterIds
+      .where(progress.completedChapterIds.contains)
+      .toList();
+  final completedSeaChapters = seaChapterIds
+      .where(progress.completedChapterIds.contains)
+      .toList();
 
   final worlds = [
     AtlasWorld(
@@ -26,8 +47,18 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
           : valleyUnlocked
           ? AtlasDiscoveryState.partial
           : AtlasDiscoveryState.locked,
-      progress: progress.worldProgress(const ['first-encounter']) / 100,
-      discoveredStories: hasFirstStory ? const ['İlk Karşılaşma'] : const [],
+      progress: progress.worldProgress(valleyChapterIds) / 100,
+      discoveredStories: [
+        for (final id in completedValleyChapters)
+          switch (id) {
+            'first-encounter' => 'İlk Karşılaşma',
+            'ben-kimim' => 'Ben Kimim?',
+            'gunluk-hayat' => 'Günlük Hayat',
+            'sevdigim-seyler' => 'Sevdiğim Şeyler',
+            'kucuk-bir-gun' => 'Küçük Bir Gün',
+            _ => id,
+          },
+      ],
       vocabularyThemes: const ['Selamlaşma', 'Tanışma', 'Duygular'],
       culturalNotes: const [
         'Selamlaşma biçimleri bağlama ve yakınlığa göre değişebilir.',
@@ -38,11 +69,21 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
       name: 'Sessiz Orman',
       description:
           'Seslerin, doğanın ve dikkatle dinlemenin yol gösterdiği kadim orman.',
-      state: forestUnlocked
+      state: completedForestChapters.length == forestChapterIds.length
+          ? AtlasDiscoveryState.discovered
+          : forestUnlocked
           ? AtlasDiscoveryState.partial
           : AtlasDiscoveryState.locked,
-      progress: 0,
-      discoveredStories: const [],
+      progress: progress.worldProgress(forestChapterIds) / 100,
+      discoveredStories: [
+        for (final id in completedForestChapters)
+          switch (id) {
+            'ormana-giris' => 'Ormana Giriş',
+            'kaybolan-yol' => 'Kaybolan Yol',
+            'gece-sesleri' => 'Gece Sesleri',
+            _ => id,
+          },
+      ],
       vocabularyThemes: const ['Doğa', 'Sesler', 'Basit yönergeler'],
       culturalNotes: const [
         'Doğa betimlemeleri İngilizce hikâyelerde güçlü bir atmosfer kurar.',
@@ -53,22 +94,22 @@ final atlasProvider = FutureProvider.autoDispose<AtlasState>((ref) async {
       name: 'Deniz Krallığı',
       description:
           'Limanlar, değişen gökyüzü ve yolculuklarla çevrili mavi krallık.',
-      state: hasWeatherStory
+      state: completedSeaChapters.length == seaChapterIds.length
           ? AtlasDiscoveryState.discovered
           : seaUnlocked
           ? AtlasDiscoveryState.partial
           : AtlasDiscoveryState.locked,
-      progress:
-          progress.worldProgress(const [
-            'duygular',
-            'hava-durumu',
-            'ulasim-araclari',
-            'yolculuk-hazirligi',
-            'seyahat-plani',
-            'deniz-canlilari',
-          ]) /
-          100,
-      discoveredStories: hasWeatherStory ? const ['Hava Durumu'] : const [],
+      progress: progress.worldProgress(seaChapterIds) / 100,
+      discoveredStories: [
+        for (final id in completedSeaChapters)
+          switch (id) {
+            'duygular' => 'Duygular',
+            'hava-durumu' => 'Hava Durumu',
+            'ulasim-araclari' => 'Ulaşım Araçları',
+            'yolculuk-hazirligi' => 'Yolculuk Hazırlığı',
+            _ => id,
+          },
+      ],
       vocabularyThemes: vocabulary.isEmpty
           ? const ['Duygular', 'Hava durumu', 'Yolculuk']
           : vocabulary.map((word) => word.word).take(4).toList(),

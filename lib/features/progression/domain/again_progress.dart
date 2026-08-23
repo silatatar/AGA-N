@@ -288,6 +288,15 @@ class AgainProgress {
           }
           if (event.storyId == 'first-encounter') {
             unlockedWorlds.add('deniz-kralligi');
+            unlockedChapters.add('duygular');
+          }
+          if (event.storyId == 'kucuk-bir-gun') {
+            unlockedWorlds.add('sessiz-orman');
+            unlockedChapters.add('ormana-giris');
+          }
+          if (event.storyId == 'gece-sesleri') {
+            unlockedWorlds.add('deniz-kralligi');
+            unlockedChapters.add('duygular');
           }
           xp += event.xp;
           growth += event.seedGrowth;
@@ -383,12 +392,42 @@ class AgainProgress {
       ...(j[key] as List? ?? const []).cast<String>(),
     };
     final learnerName = j['learnerType'] as String?;
+    final completedChapters = set('completedChapterIds');
+    final unlockedChapters = set('unlockedChapterIds');
+    const nextChapter = {
+      'first-encounter': 'ben-kimim',
+      'ben-kimim': 'gunluk-hayat',
+      'gunluk-hayat': 'sevdigim-seyler',
+      'sevdigim-seyler': 'kucuk-bir-gun',
+      'ormana-giris': 'kaybolan-yol',
+      'kaybolan-yol': 'gece-sesleri',
+      'duygular': 'hava-durumu',
+      'hava-durumu': 'ulasim-araclari',
+      'ulasim-araclari': 'yolculuk-hazirligi',
+    };
+    final unlockedWorlds = set('unlockedWorldIds')..add('yasam-vadisi');
+    unlockedChapters.add('first-encounter');
+    for (final completed in completedChapters) {
+      final next = nextChapter[completed];
+      if (next != null) unlockedChapters.add(next);
+    }
+    if (completedChapters.contains('kucuk-bir-gun')) {
+      unlockedWorlds.add('sessiz-orman');
+      unlockedChapters.add('ormana-giris');
+    }
+    if (completedChapters.contains('gece-sesleri')) {
+      unlockedWorlds.add('deniz-kralligi');
+      unlockedChapters.add('duygular');
+    }
+    if (unlockedWorlds.contains('deniz-kralligi')) {
+      unlockedChapters.add('duygular');
+    }
     return AgainProgress(
       schemaVersion: j['schemaVersion'] as int? ?? 1,
       completedStoryIds: set('completedStoryIds'),
-      completedChapterIds: set('completedChapterIds'),
-      unlockedChapterIds: set('unlockedChapterIds'),
-      unlockedWorldIds: set('unlockedWorldIds'),
+      completedChapterIds: completedChapters,
+      unlockedChapterIds: unlockedChapters,
+      unlockedWorldIds: unlockedWorlds,
       currentWorldId: j['currentWorldId'] as String?,
       currentChapterId: j['currentChapterId'] as String?,
       totalXp: j['totalXp'] as int? ?? 0,

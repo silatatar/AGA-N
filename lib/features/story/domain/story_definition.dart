@@ -10,25 +10,58 @@ class StoryDefinition {
     required this.startNodeId,
     required this.nodes,
     required this.reward,
+    this.learning,
+    this.catalogOrder = 0,
     this.allowedLearnerTypes = LearnerType.values,
     this.minimumLevel = 1,
     this.maximumLevel,
     this.tags = const {},
     this.toneVariantKey,
+    this.coverVisual,
   });
   final String id, worldId, title, description, startNodeId;
   final StoryChapter chapter;
   final Map<String, StoryNode> nodes;
   final StoryReward reward;
+  final StoryLearningMetadata? learning;
+  final int catalogOrder;
   final List<LearnerType> allowedLearnerTypes;
   final int minimumLevel;
   final int? maximumLevel;
   final Set<String> tags;
   final String? toneVariantKey;
+  final StoryVisualMetadata? coverVisual;
   bool isEligible(LearnerType type, int level) =>
       allowedLearnerTypes.contains(type) &&
       level >= minimumLevel &&
       (maximumLevel == null || level <= maximumLevel!);
+}
+
+enum CefrLevel { a1, a1Plus, a2 }
+
+enum StorySkill { reading, listening, writing, speaking, vocabulary, grammar }
+
+class StoryLearningMetadata {
+  const StoryLearningMetadata({
+    required this.cefr,
+    required this.learningGoals,
+    required this.grammarTargets,
+    required this.skillFocus,
+    this.interestTags = const {},
+    this.ttsEligible = false,
+    this.slowReplayAllowed = false,
+    this.expectedSpeakingPhrase,
+    this.locale = 'en-US',
+  });
+
+  final CefrLevel cefr;
+  final List<String> learningGoals;
+  final List<String> grammarTargets;
+  final Set<StorySkill> skillFocus;
+  final Set<String> interestTags;
+  final bool ttsEligible, slowReplayAllowed;
+  final String? expectedSpeakingPhrase;
+  final String locale;
 }
 
 class StoryChapter {
@@ -40,11 +73,13 @@ class StoryChapter {
     this.hasListening = false,
     this.hasSpeaking = false,
     this.nextChapterId,
+    this.displayTitle,
   });
   final String id;
   final int number, durationMinutes, vocabularyCount;
   final bool hasListening, hasSpeaking;
   final String? nextChapterId;
+  final String? displayTitle;
 }
 
 enum StoryNodeKind {
@@ -94,12 +129,27 @@ class StoryScene {
     required this.id,
     required this.artKey,
     this.atmosphere = const {},
-    this.assetPath,
-    this.semanticLabel,
+    this.visual,
   });
   final String id, artKey;
-  final String? assetPath, semanticLabel;
+  final StoryVisualMetadata? visual;
   final Map<String, String> atmosphere;
+}
+
+class StoryVisualMetadata {
+  const StoryVisualMetadata({
+    required this.assetPath,
+    required this.accessibilityDescription,
+    this.alignmentX = 0,
+    this.alignmentY = 0,
+    this.overlayStrength = .48,
+  }) : assert(alignmentX >= -1 && alignmentX <= 1),
+       assert(alignmentY >= -1 && alignmentY <= 1),
+       assert(overlayStrength >= 0 && overlayStrength <= 1);
+
+  final String assetPath;
+  final String accessibilityDescription;
+  final double alignmentX, alignmentY, overlayStrength;
 }
 
 class StoryChoice {

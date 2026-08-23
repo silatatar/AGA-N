@@ -8,84 +8,27 @@ import '../../../core/widgets/again_components.dart';
 import '../../../core/widgets/again_navigation.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../learner_profile/domain/learner_type.dart';
-import '../../learner_profile/presentation/learner_profile_controller.dart';
-import '../../learner_profile/presentation/learner_selection_controller.dart';
+import '../../learner_profile/presentation/learner_personalization_provider.dart';
+import '../../huma/application/huma_context_provider.dart';
+import '../../huma/domain/huma_models.dart';
 import '../../onboarding/domain/onboarding_preferences.dart';
-import '../../onboarding/presentation/onboarding_controller.dart';
 import '../../progression/domain/again_progress.dart';
 import '../../progression/presentation/progression_controller.dart';
+import '../../story/data/story_repository.dart';
 import '../../vocabulary/domain/vocabulary_entry.dart';
 import '../../vocabulary/presentation/vocabulary_controller.dart';
-
-enum HomeRecommendationKind {
-  continueStory,
-  reviewWords,
-  dailyGoal,
-  exploreMap,
-}
-
-class HomeRecommendation {
-  const HomeRecommendation({
-    required this.kind,
-    required this.message,
-    required this.label,
-    required this.route,
-  });
-  final HomeRecommendationKind kind;
-  final String message, label, route;
-}
-
-HomeRecommendation homeRecommendation({
-  required AgainProgress progress,
-  required int dueWords,
-  required int goal,
-}) {
-  if (progress.currentChapterId == 'hava-durumu' &&
-      !progress.completedChapterIds.contains('hava-durumu')) {
-    return const HomeRecommendation(
-      kind: HomeRecommendationKind.continueStory,
-      message: 'Hava Durumu hikâyemize kaldığımız yerden devam edebiliriz.',
-      label: 'Devam Et',
-      route: '/world/deniz-kralligi/chapter/hava-durumu',
-    );
-  }
-  if (dueWords > 0) {
-    return HomeRecommendation(
-      kind: HomeRecommendationKind.reviewWords,
-      message: 'Bugün $dueWords kelime seni tekrar bekliyor.',
-      label: 'Tekrar Et',
-      route: AppRoutes.vocabularyGardenPath,
-    );
-  }
-  final minutes = progress.activityFor(DateTime.now()).learningMinutes;
-  if (minutes < goal) {
-    return HomeRecommendation(
-      kind: HomeRecommendationKind.dailyGoal,
-      message: 'Bugünkü hedefinin ${goal - minutes} dakikası kaldı.',
-      label: 'Yolculuğa Başla',
-      route: AppRoutes.worldMapPath,
-    );
-  }
-  return const HomeRecommendation(
-    kind: HomeRecommendationKind.exploreMap,
-    message: 'Yeni bir yol seni bekliyor.',
-    label: 'Haritayı Aç',
-    route: AppRoutes.worldMapPath,
-  );
-}
+import '../../world/domain/world_visual_profile.dart';
+import '../domain/home_learning_priority.dart';
 
 class HomeDashboardScreen extends ConsumerWidget {
   const HomeDashboardScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(learnerProfileProvider);
-    final learner = ref.watch(learnerSelectionProvider);
-    final onboarding = ref.watch(onboardingProvider);
+    final personalization = ref.watch(learnerPersonalizationProvider);
     final progress = ref.watch(progressionProvider);
     final vocabulary = ref.watch(vocabularyProvider);
-    if (profile.isLoading ||
-        learner.isLoading ||
-        onboarding.isLoading ||
+    final humaMessage = ref.watch(humaMessageProvider(HumaScreen.home));
+    if (personalization.isLoading ||
         progress.isLoading ||
         vocabulary.isLoading) {
       return const Scaffold(
@@ -93,20 +36,14 @@ class HomeDashboardScreen extends ConsumerWidget {
         body: LoadingView(message: 'Dünyan hazırlanıyor…'),
       );
     }
-    if (profile.hasError ||
-        learner.hasError ||
-        onboarding.hasError ||
-        progress.hasError ||
-        vocabulary.hasError) {
+    if (personalization.hasError || progress.hasError || vocabulary.hasError) {
       return Scaffold(
         backgroundColor: AgainColors.night950,
         body: ErrorView(
           title: 'Yolculuk kısa bir mola verdi',
           message: 'Dünyana bağlanırken küçük bir sorun oluştu.',
           onRetry: () {
-            ref.invalidate(learnerProfileProvider);
-            ref.invalidate(learnerSelectionProvider);
-            ref.invalidate(onboardingProvider);
+            ref.invalidate(learnerPersonalizationProvider);
             ref.invalidate(progressionProvider);
             ref.invalidate(vocabularyProvider);
           },
@@ -114,11 +51,13 @@ class HomeDashboardScreen extends ConsumerWidget {
       );
     }
     return _LivingHome(
-      name: profile.value?.displayName ?? 'Gezgin',
-      learnerType: learner.value,
-      preferences: onboarding.value ?? const OnboardingPreferences(),
+      name: personalization.value?.identity?.displayName ?? 'Gezgin',
+      learnerType: personalization.value?.learnerType,
+      preferences:
+          personalization.value?.preferences ?? const OnboardingPreferences(),
       progress: progress.value ?? const AgainProgress(),
       words: vocabulary.value ?? const [],
+      humaMessage: humaMessage,
     );
   }
 }
@@ -130,21 +69,25 @@ class _LivingHome extends StatelessWidget {
     required this.preferences,
     required this.progress,
     required this.words,
+    required this.humaMessage,
   });
   final String name;
   final LearnerType? learnerType;
   final OnboardingPreferences preferences;
   final AgainProgress progress;
   final List<VocabularyEntry> words;
+  final HumaMessage humaMessage;
 
   @override
   Widget build(BuildContext context) {
     final due = words.where((word) => word.isDue).length;
-    final goal = preferences.dailyMinutes ?? 15;
-    final recommendation = homeRecommendation(
+    final priority = resolveHomeLearningPriority(
       progress: progress,
+      catalog: localStoryCatalog,
       dueWords: due,
-      goal: goal,
+      learnerType: learnerType,
+      goals: preferences.goals,
+      interests: preferences.interests,
     );
     final child = learnerType == LearnerType.child;
     return Scaffold(
@@ -158,7 +101,8 @@ class _LivingHome extends StatelessWidget {
             preferences: preferences,
             progress: progress,
             words: words,
-            recommendation: recommendation,
+            priority: priority,
+            humaMessage: humaMessage,
             child: child,
             wide: wide,
           );
@@ -194,7 +138,8 @@ class _HomeContent extends StatelessWidget {
     required this.preferences,
     required this.progress,
     required this.words,
-    required this.recommendation,
+    required this.priority,
+    required this.humaMessage,
     required this.child,
     required this.wide,
   });
@@ -203,7 +148,8 @@ class _HomeContent extends StatelessWidget {
   final OnboardingPreferences preferences;
   final AgainProgress progress;
   final List<VocabularyEntry> words;
-  final HomeRecommendation recommendation;
+  final HomeLearningPriority priority;
+  final HumaMessage humaMessage;
   final bool child, wide;
 
   @override
@@ -230,13 +176,13 @@ class _HomeContent extends StatelessWidget {
                 xp: progress.totalXp,
               ),
               const SizedBox(height: 18),
+              _HumaGuide(message: humaMessage, child: child),
+              const SizedBox(height: 18),
               _JourneyHero(
                 progress: progress,
-                recommendation: recommendation,
+                priority: priority,
                 child: child,
               ),
-              const SizedBox(height: 18),
-              _HumaGuide(recommendation: recommendation, child: child),
               const SizedBox(height: 18),
               if (wide)
                 Row(
@@ -247,7 +193,7 @@ class _HomeContent extends StatelessWidget {
                         children: [
                           _DailyGoal(
                             minutes: today.learningMinutes,
-                            goal: preferences.dailyMinutes ?? 15,
+                            goal: preferences.dailyMinutes,
                           ),
                           const SizedBox(height: 16),
                           _SeedGrowth(growth: progress.seedGrowth),
@@ -269,7 +215,7 @@ class _HomeContent extends StatelessWidget {
               else ...[
                 _DailyGoal(
                   minutes: today.learningMinutes,
-                  goal: preferences.dailyMinutes ?? 15,
+                  goal: preferences.dailyMinutes,
                 ),
                 const SizedBox(height: 14),
                 _SeedGrowth(growth: progress.seedGrowth),
@@ -337,25 +283,35 @@ class _Greeting extends StatelessWidget {
 class _JourneyHero extends StatelessWidget {
   const _JourneyHero({
     required this.progress,
-    required this.recommendation,
+    required this.priority,
     required this.child,
   });
   final AgainProgress progress;
-  final HomeRecommendation recommendation;
+  final HomeLearningPriority priority;
   final bool child;
   @override
   Widget build(BuildContext context) {
-    final active = recommendation.kind == HomeRecommendationKind.continueStory;
-    final completed = progress.completedChapterIds.contains('hava-durumu');
-    final value = completed
-        ? 1.0
-        : active
-        ? .45
-        : 0.0;
+    final story = priority.story;
+    final worldId =
+        priority.worldId ?? progress.currentWorldId ?? 'yasam-vadisi';
+    final visual = WorldVisualProfiles.forWorld(worldId);
+    final worldStories = localStoryCatalog.byWorld(worldId);
+    final value =
+        progress.worldProgress(worldStories.map((item) => item.chapter.id)) /
+        100;
+    final title = story?.title ?? _worldName(worldId);
+    final subtitle = story?.description ?? visual.description;
+    final label = switch (priority.kind) {
+      HomeLearningPriorityKind.activeStory => 'Devam Et',
+      HomeLearningPriorityKind.nextStory => 'Hikâyeye Başla',
+      HomeLearningPriorityKind.vocabulary => 'Kelimeleri Tekrar Et',
+      HomeLearningPriorityKind.world => 'Dünyayı Aç',
+      HomeLearningPriorityKind.complete => 'Haritayı Aç',
+    };
+    final cover = story?.coverVisual;
     return Semantics(
-      button: true,
-      label:
-          '${active ? 'Deniz Krallığı, Hava Durumu' : 'Yeni Bir Yolculuk Seç'}. Yüzde ${(value * 100).round()} tamamlandı.',
+      container: true,
+      label: '$title. Yüzde ${(value * 100).round()} tamamlandı.',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
         child: SizedBox(
@@ -364,9 +320,13 @@ class _JourneyHero extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               Image.asset(
-                'assets/images/worlds/deniz_kralligi/hero_background.webp',
+                cover?.assetPath ?? visual.detailHeroAsset!,
                 fit: BoxFit.cover,
-                cacheWidth: 1280,
+                alignment: cover == null
+                    ? Alignment.center
+                    : Alignment(cover.alignmentX, cover.alignmentY),
+                cacheWidth: 960,
+                excludeFromSemantics: true,
               ),
               const DecoratedBox(
                 decoration: BoxDecoration(
@@ -385,7 +345,9 @@ class _JourneyHero extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      active ? 'DENİZ KRALLIĞI' : 'YENİ BİR YOLCULUK',
+                      story == null
+                          ? visual.eyebrow
+                          : _worldName(worldId).toUpperCase(),
                       style: const TextStyle(
                         color: AgainColors.gold400,
                         fontWeight: FontWeight.w900,
@@ -393,12 +355,21 @@ class _JourneyHero extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      active ? 'Hava Durumu' : 'Haritada dünyanı seç',
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
                           ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: child ? 2 : 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AgainColors.mist),
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
@@ -412,9 +383,9 @@ class _JourneyHero extends StatelessWidget {
                       width: 210,
                       child: AgainPrimaryButton(
                         key: const Key('home-continue-story'),
-                        label: recommendation.label,
+                        label: label,
                         icon: Icons.arrow_forward_rounded,
-                        onPressed: () => context.push(recommendation.route),
+                        onPressed: () => context.push(priority.route),
                       ),
                     ),
                   ],
@@ -429,8 +400,8 @@ class _JourneyHero extends StatelessWidget {
 }
 
 class _HumaGuide extends StatelessWidget {
-  const _HumaGuide({required this.recommendation, required this.child});
-  final HomeRecommendation recommendation;
+  const _HumaGuide({required this.message, required this.child});
+  final HumaMessage message;
   final bool child;
   @override
   Widget build(BuildContext context) => AgainCard(
@@ -451,9 +422,16 @@ class _HumaGuide extends StatelessWidget {
               ),
               const SizedBox(height: 5),
               Text(
-                recommendation.message,
+                message.text,
                 style: TextStyle(fontSize: child ? 17 : 15, height: 1.4),
               ),
+              if (message.action case final action?) ...[
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: () => context.push(action.route),
+                  child: Text(action.label),
+                ),
+              ],
             ],
           ),
         ),
@@ -464,12 +442,18 @@ class _HumaGuide extends StatelessWidget {
 
 class _DailyGoal extends StatelessWidget {
   const _DailyGoal({required this.minutes, required this.goal});
-  final int minutes, goal;
+  final int minutes;
+  final int? goal;
   @override
   Widget build(BuildContext context) {
-    final value = goal <= 0 ? 0.0 : (minutes / goal).clamp(0.0, 1.0);
+    final configuredGoal = goal;
+    final value = configuredGoal == null || configuredGoal <= 0
+        ? 0.0
+        : (minutes / configuredGoal).clamp(0.0, 1.0);
     return Semantics(
-      label: 'Bugünkü hedef. $minutes dakika tamamlandı, hedef $goal dakika.',
+      label: configuredGoal == null
+          ? 'Bugün $minutes dakika öğrenildi. Günlük hedef ayarlanmadı.'
+          : 'Bugünkü hedef. $minutes dakika tamamlandı, hedef $configuredGoal dakika.',
       child: AgainCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -477,7 +461,9 @@ class _DailyGoal extends StatelessWidget {
             const _Title(Icons.route_rounded, 'Bugünkü Yolculuk'),
             const SizedBox(height: 16),
             Text(
-              '$minutes / $goal dakika',
+              configuredGoal == null
+                  ? '$minutes dakika • Hedef ayarlanmadı'
+                  : '$minutes / $configuredGoal dakika',
               key: const Key('home-daily-goal'),
               style: const TextStyle(
                 fontSize: 25,
@@ -497,7 +483,9 @@ class _DailyGoal extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              value >= 1
+              configuredGoal == null
+                  ? 'Günlük hedefini profilinden belirleyebilirsin.'
+                  : value >= 1
                   ? 'Bugünkü hedefini tamamladın.'
                   : 'Her dakika dünyanda bir iz bırakır.',
               style: const TextStyle(color: AgainColors.mist),
@@ -880,6 +868,13 @@ String _level(EnglishLevel? level) => switch (level) {
   EnglishLevel.simpleSentences => 'A2',
   EnglishLevel.conversational => 'B1',
   EnglishLevel.placementTest || null => 'Seviye bekleniyor',
+};
+
+String _worldName(String id) => switch (id) {
+  'yasam-vadisi' => 'Yaşam Vadisi',
+  'sessiz-orman' => 'Sessiz Orman',
+  'deniz-kralligi' => 'Deniz Krallığı',
+  _ => 'Öğrenme Dünyası',
 };
 
 class _PlantPainter extends CustomPainter {

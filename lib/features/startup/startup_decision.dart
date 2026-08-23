@@ -1,22 +1,11 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../auth/domain/auth_session.dart';
 import '../learner_profile/presentation/learner_selection_controller.dart';
+import '../learner_profile/data/learner_personalization_store.dart';
 import '../onboarding/presentation/onboarding_controller.dart';
-
-enum AuthSessionKind {
-  unauthenticated,
-  guest,
-  developmentAuthenticated,
-  productionAuthenticated,
-}
-
-class AuthSession {
-  const AuthSession(this.kind, {this.userId});
-  final AuthSessionKind kind;
-  final String? userId;
-  bool get canEnterProduct => kind != AuthSessionKind.unauthenticated;
-}
+import '../sync/application/data_ownership_provider.dart';
 
 enum StartupDestination {
   humaArrival,
@@ -24,6 +13,7 @@ enum StartupDestination {
   profileName,
   onboarding,
   accountDecision,
+  emailVerification,
   home,
 }
 
@@ -43,7 +33,10 @@ StartupDestination decideStartup({
   if (!onboardingComplete && !answersComplete) {
     return StartupDestination.onboarding;
   }
-  if (!session.canEnterProduct) {
+  if (session.status == AuthStatus.emailVerificationRequired) {
+    return StartupDestination.emailVerification;
+  }
+  if (!session.canUseLocalLearning) {
     return StartupDestination.accountDecision;
   }
   return StartupDestination.home;
@@ -52,7 +45,7 @@ StartupDestination decideStartup({
 class StartupState {
   const StartupState({
     this.schemaVersion = 1,
-    this.auth = const AuthSession(AuthSessionKind.unauthenticated),
+    this.auth = const AuthSession(status: AuthStatus.unauthenticated),
     this.onboardingComplete = false,
   });
   final int schemaVersion;
@@ -66,17 +59,17 @@ class StartupState {
       );
   Map<String, Object?> toJson() => {
     'schemaVersion': schemaVersion,
-    'auth': auth.kind.name,
-    'userId': auth.userId,
+    'auth': auth.status.name,
+    'userId': auth.user?.id,
+    'email': auth.user?.email,
+    'displayName': auth.user?.displayName,
+    'emailVerified': auth.user?.emailVerified,
+    'createdAt': auth.user?.createdAt.toIso8601String(),
     'onboardingComplete': onboardingComplete,
   };
   factory StartupState.fromJson(Map<String, Object?> j) => StartupState(
     schemaVersion: j['schemaVersion'] as int? ?? 1,
-    auth: AuthSession(
-      AuthSessionKind.values.where((e) => e.name == j['auth']).firstOrNull ??
-          AuthSessionKind.unauthenticated,
-      userId: j['userId'] as String?,
-    ),
+    auth: _sessionFromJson(j),
     onboardingComplete: j['onboardingComplete'] as bool? ?? false,
   );
 }
@@ -139,21 +132,36 @@ class StartupController extends AsyncNotifier<StartupState> {
   Future<void> continueAsGuest() async => _save(
     (state.value ?? const StartupState()).copyWith(
       onboardingComplete: true,
-      auth: const AuthSession(AuthSessionKind.guest),
+      auth: const AuthSession(status: AuthStatus.guest),
     ),
   );
-  Future<void> developmentAuthenticated(String userId) async => _save(
+  Future<void> setAuthSession(AuthSession session) async => _save(
     (state.value ?? const StartupState()).copyWith(
       onboardingComplete: true,
-      auth: AuthSession(
-        AuthSessionKind.developmentAuthenticated,
-        userId: userId,
-      ),
+      auth: session,
+    ),
+  );
+
+  Future<void> signOut() async => _save(
+    (state.value ?? const StartupState()).copyWith(
+      auth: const AuthSession(status: AuthStatus.unauthenticated),
     ),
   );
   Future<void> _save(StartupState value) async {
     state = AsyncData(value);
     await ref.read(startupRepositoryProvider).save(value);
+    try {
+      final store = LearnerPersonalizationStore(
+        ownership: ref.read(dataOwnershipStoreProvider),
+      );
+      final profile = await store.read();
+      await store.save(
+        profile.copyWith(onboardingComplete: value.onboardingComplete),
+      );
+    } catch (_) {
+      // Startup remains authoritative if the optional migration mirror cannot
+      // be reached on an unsupported local-storage platform.
+    }
   }
 
   Future<StartupDestination> decide() async {
@@ -175,4 +183,35 @@ class StartupController extends AsyncNotifier<StartupState> {
       session: startup.auth,
     );
   }
+}
+
+AuthSession _sessionFromJson(Map<String, Object?> json) {
+  final legacy = json['auth'] as String?;
+  final status = switch (legacy) {
+    'guest' => AuthStatus.guest,
+    'authenticated' => AuthStatus.authenticated,
+    'emailVerificationRequired' => AuthStatus.emailVerificationRequired,
+    _ => AuthStatus.unauthenticated,
+  };
+  final userId = json['userId'] as String?;
+  if (userId == null ||
+      status == AuthStatus.guest ||
+      status == AuthStatus.unauthenticated) {
+    return AuthSession(status: status);
+  }
+  final verified = json['emailVerified'] == true;
+  return AuthSession(
+    status: verified
+        ? AuthStatus.authenticated
+        : AuthStatus.emailVerificationRequired,
+    user: AuthUser(
+      id: userId,
+      email: json['email'] as String? ?? '',
+      displayName: json['displayName'] as String? ?? '',
+      emailVerified: verified,
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    ),
+  );
 }

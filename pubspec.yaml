@@ -36,10 +36,13 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  dio: ^5.9.0
   flutter_riverpod: ^3.0.3
   go_router: ^17.0.1
+  flutter_tts: ^4.2.5
+  record: ^7.1.1
   shared_preferences: ^2.5.5
+  speech_to_text: ^7.4.0
+  supabase_flutter: ^2.17.2
 
 dev_dependencies:
   flutter_test:
@@ -65,8 +68,24 @@ flutter:
   assets:
     - assets/images/huma.png
     - assets/images/worlds/shared/world_map_atlas_placeholder.webp
+    - assets/images/worlds/yasam_vadisi/environment_v1.webp
+    - assets/images/worlds/sessiz_orman/environment_v1.webp
+    - assets/images/worlds/deniz_kralligi/environment_v1.webp
     - assets/images/worlds/deniz_kralligi/hero_background.webp
-    - assets/images/stories/deniz_kralligi/hava_durumu/scene_01.webp
+    - assets/images/stories/deniz_kralligi/duygular/
+    - assets/images/stories/deniz_kralligi/hava_durumu/
+    - assets/images/stories/deniz_kralligi/ulasim_araclari/
+    - assets/images/stories/deniz_kralligi/yolculuk_hazirligi/
+    - assets/images/stories/yasam_vadisi/ilk_karsilasma/cover_v1.webp
+    - assets/images/stories/yasam_vadisi/ilk_karsilasma/scene_arrival_v1.webp
+    - assets/images/stories/yasam_vadisi/ilk_karsilasma/scene_meeting_v1.webp
+    - assets/images/stories/yasam_vadisi/ben_kimim/
+    - assets/images/stories/yasam_vadisi/gunluk_hayat/
+    - assets/images/stories/yasam_vadisi/sevdigim_seyler/
+    - assets/images/stories/yasam_vadisi/kucuk_bir_gun/
+    - assets/images/stories/sessiz_orman/ormana_giris/
+    - assets/images/stories/sessiz_orman/kaybolan_yol/
+    - assets/images/stories/sessiz_orman/gece_sesleri/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

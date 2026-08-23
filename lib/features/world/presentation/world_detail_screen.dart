@@ -5,17 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/again_tokens.dart';
+import '../../../core/widgets/again_cinematic.dart';
 import '../../../core/widgets/again_components.dart';
-import '../../opening/presentation/opening_atmosphere.dart';
 import '../../progression/domain/again_progress.dart';
 import '../../progression/presentation/progression_controller.dart';
+import '../../story/data/story_repository.dart';
 import '../../huma/application/huma_context_provider.dart';
 import '../../huma/domain/huma_models.dart';
 import '../../huma/presentation/huma_components.dart';
 import '../domain/world_chapter.dart';
 import '../domain/world_region.dart';
-
-const _seaHero = 'assets/images/worlds/deniz_kralligi/hero_background.webp';
+import '../domain/world_visual_profile.dart';
 
 class WorldDetailScreen extends ConsumerStatefulWidget {
   const WorldDetailScreen({super.key, required this.region});
@@ -30,14 +30,26 @@ class _WorldDetailScreenState extends ConsumerState<WorldDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.region.slug != 'deniz-kralligi') {
-      return _SimpleWorldDetail(region: widget.region);
-    }
     final progressValue = ref.watch(progressionProvider).value;
     final progress = progressValue ?? const AgainProgress();
-    final chapters = progressValue == null
-        ? denizKralligiChapters
-        : denizChaptersFrom(progressValue);
+    final playableChapters = catalogChaptersForWorld(
+      localStoryCatalog,
+      widget.region.slug,
+      progress,
+    );
+    if (widget.region.slug != 'deniz-kralligi') {
+      return _SimpleWorldDetail(
+        region: widget.region,
+        chapters: playableChapters,
+        onPlay: _play,
+      );
+    }
+    final chapters = [
+      ...playableChapters,
+      ...denizChaptersFrom(
+        progress,
+      ).where((chapter) => !chapter.hasPlayableContent),
+    ];
     final selected = chapters.firstWhere(
       (chapter) => chapter.id == _selectedId,
       orElse: () => chapters.first,
@@ -162,7 +174,7 @@ class _SeaHero extends StatelessWidget {
           transitionOnUserGestures: true,
           child: RepaintBoundary(
             child: Image.asset(
-              _seaHero,
+              WorldVisualProfiles.seaKingdom.detailHeroAsset!,
               fit: BoxFit.cover,
               alignment: const Alignment(.22, .25),
               cacheWidth: 1440,
@@ -469,6 +481,36 @@ class _JourneyStop extends StatelessWidget {
                         children: [
                           Row(
                             children: [
+                              if (chapter.coverAsset != null) ...[
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  clipBehavior: Clip.antiAlias,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AgainColors.gold400.withValues(
+                                        alpha: .72,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Image.asset(
+                                    chapter.coverAsset!,
+                                    key: Key('chapter-cover-${chapter.id}'),
+                                    excludeFromSemantics: true,
+                                    fit: BoxFit.cover,
+                                    alignment: Alignment(
+                                      chapter.coverAlignmentX,
+                                      chapter.coverAlignmentY,
+                                    ),
+                                    cacheWidth: 160,
+                                    errorBuilder: (_, _, _) => Center(
+                                      child: Text('${chapter.number}'),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                              ],
                               Expanded(
                                 child: Text(
                                   '${chapter.number}. ${chapter.title}',
@@ -653,40 +695,58 @@ class _RoundGlassButton extends StatelessWidget {
 }
 
 class _SimpleWorldDetail extends StatelessWidget {
-  const _SimpleWorldDetail({required this.region});
+  const _SimpleWorldDetail({
+    required this.region,
+    required this.chapters,
+    required this.onPlay,
+  });
   final WorldRegion region;
+  final List<WorldChapter> chapters;
+  final ValueChanged<WorldChapter> onPlay;
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AgainColors.night950,
-    body: OpeningAtmosphere(
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AgainSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: AgainCard(
+  Widget build(BuildContext context) {
+    final visual = WorldVisualProfiles.forWorld(region.slug);
+    return Scaffold(
+      backgroundColor: AgainColors.night950,
+      body: AgainCinematicBackground(
+        primary: visual.primary,
+        secondary: visual.secondary,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 64),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 820),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: IconButton(
+                      child: _RoundGlassButton(
                         tooltip: 'Haritaya dön',
+                        icon: Icons.arrow_back_rounded,
                         onPressed: context.pop,
-                        icon: const Icon(Icons.arrow_back_rounded),
                       ),
                     ),
+                    const SizedBox(height: AgainSpacing.lg),
+                    _WorldIdentityHero(region: region, visual: visual),
+                    const SizedBox(height: AgainSpacing.lg),
                     Text(
-                      region.title,
-                      key: const Key('world-detail-title'),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium,
+                      'Bölüm yolculuğu',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: AgainColors.gold200,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: AgainSpacing.sm),
-                    Text(region.subtitle, textAlign: TextAlign.center),
-                    const SizedBox(height: AgainSpacing.md),
-                    const Text('Bu dünyanın bölüm yolculuğu yakında açılacak.'),
+                    for (final chapter in chapters) ...[
+                      _CompactWorldChapter(
+                        chapter: chapter,
+                        accent: visual.primary,
+                        onPlay: onPlay,
+                      ),
+                      const SizedBox(height: AgainSpacing.sm),
+                    ],
                   ],
                 ),
               ),
@@ -694,8 +754,271 @@ class _SimpleWorldDetail extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _WorldIdentityHero extends StatelessWidget {
+  const _WorldIdentityHero({required this.region, required this.visual});
+  final WorldRegion region;
+  final WorldVisualProfile visual;
+
+  @override
+  Widget build(BuildContext context) => AgainGlassPanel(
+    accent: visual.primary,
+    emphasized: true,
+    padding: EdgeInsets.zero,
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(AgainRadii.card - 1),
+      child: SizedBox(
+        height: 292,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    visual.surfaceTint,
+                    visual.primary.withValues(alpha: .42),
+                    AgainColors.night950,
+                  ],
+                ),
+              ),
+            ),
+            if (visual.detailHeroAsset != null)
+              RepaintBoundary(
+                child: Image.asset(
+                  visual.detailHeroAsset!,
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0, .34),
+                  cacheWidth: 1280,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    visual.surfaceTint.withValues(alpha: .2),
+                    AgainColors.night950.withValues(alpha: .9),
+                  ],
+                  stops: const [.2, .56, 1],
+                ),
+              ),
+            ),
+            CustomPaint(painter: _WorldSilhouettePainter(visual.atmosphere)),
+            Padding(
+              padding: const EdgeInsets.all(AgainSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    visual.eyebrow,
+                    style: TextStyle(
+                      color: visual.secondary,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    region.title,
+                    key: const Key('world-detail-title'),
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    visual.learningTheme,
+                    style: TextStyle(
+                      color: visual.secondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    visual.description,
+                    style: const TextStyle(color: AgainColors.mist),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
+}
+
+class _CompactWorldChapter extends StatelessWidget {
+  const _CompactWorldChapter({
+    required this.chapter,
+    required this.accent,
+    required this.onPlay,
+  });
+  final WorldChapter chapter;
+  final Color accent;
+  final ValueChanged<WorldChapter> onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _stateColor(chapter.state);
+    final icon = switch (chapter.state) {
+      ChapterState.completed => Icons.check_rounded,
+      ChapterState.locked => Icons.lock_outline_rounded,
+      ChapterState.comingSoon => Icons.hourglass_empty_rounded,
+      _ => Icons.play_arrow_rounded,
+    };
+    return Semantics(
+      button: chapter.isSelectable,
+      label: '${chapter.title}, ${_stateLabel(chapter.state)}',
+      child: InkWell(
+        key: Key('chapter-${chapter.id}'),
+        borderRadius: BorderRadius.circular(AgainRadii.card),
+        onTap: chapter.isSelectable ? () => onPlay(chapter) : null,
+        child: AgainGlassPanel(
+          accent: chapter.state == ChapterState.current ? accent : color,
+          emphasized: chapter.state == ChapterState.current,
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: .14),
+                  border: Border.all(color: color.withValues(alpha: .65)),
+                ),
+                child: chapter.coverAsset != null
+                    ? Image.asset(
+                        chapter.coverAsset!,
+                        key: Key('chapter-cover-${chapter.id}'),
+                        excludeFromSemantics: true,
+                        fit: BoxFit.cover,
+                        alignment: Alignment(
+                          chapter.coverAlignmentX,
+                          chapter.coverAlignmentY,
+                        ),
+                        cacheWidth: 160,
+                        errorBuilder: (_, _, _) => Center(
+                          child: Text(
+                            '${chapter.number}',
+                            style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child:
+                            chapter.state == ChapterState.current ||
+                                chapter.state == ChapterState.available
+                            ? Text(
+                                '${chapter.number}',
+                                style: TextStyle(
+                                  color: color,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              )
+                            : Icon(icon, color: color, size: 20),
+                      ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      chapter.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${chapter.level} • ${chapter.durationMinutes} dk • ${chapter.vocabularyCount} kelime',
+                      style: const TextStyle(
+                        color: AgainColors.slate,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AgainStatusBadge(
+                label: _stateLabel(chapter.state),
+                icon: icon,
+                color: color,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WorldSilhouettePainter extends CustomPainter {
+  const _WorldSilhouettePainter(this.atmosphere);
+  final WorldAtmosphere atmosphere;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final glow = Paint()..style = PaintingStyle.fill;
+    switch (atmosphere) {
+      case WorldAtmosphere.sunlitValley:
+        glow.color = AgainColors.gold400.withValues(alpha: .18);
+        canvas.drawCircle(
+          Offset(size.width * .76, size.height * .22),
+          70,
+          glow,
+        );
+        glow.color = AgainColors.emerald600.withValues(alpha: .48);
+        canvas.drawOval(
+          Rect.fromLTWH(-30, size.height * .45, size.width * .75, size.height),
+          glow,
+        );
+      case WorldAtmosphere.moonlitForest:
+        glow.color = AgainColors.turquoise300.withValues(alpha: .12);
+        canvas.drawCircle(Offset(size.width * .72, size.height * .2), 54, glow);
+        glow.color = const Color(0xCC061B20);
+        for (var i = 0; i < 7; i++) {
+          final x = size.width * (i / 6);
+          canvas.drawRect(
+            Rect.fromLTWH(x, size.height * .18, 18 + i % 3 * 8, size.height),
+            glow,
+          );
+        }
+      case WorldAtmosphere.underwater:
+        glow.color = AgainColors.turquoise300.withValues(alpha: .12);
+        for (var i = 0; i < 5; i++) {
+          final path = Path()
+            ..moveTo(size.width * (.12 + i * .18), 0)
+            ..lineTo(size.width * (.24 + i * .18), size.height)
+            ..lineTo(size.width * (.34 + i * .18), size.height)
+            ..lineTo(size.width * (.2 + i * .18), 0)
+            ..close();
+          canvas.drawPath(path, glow);
+        }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WorldSilhouettePainter oldDelegate) =>
+      oldDelegate.atmosphere != atmosphere;
 }
 
 class _BubblePainter extends CustomPainter {

@@ -65,7 +65,7 @@ class HumaContext {
     this.currentChapterId,
     this.activeStoryRoute,
     this.dailyMinutes = 0,
-    this.dailyTarget = 15,
+    this.dailyTarget = 0,
     this.currentStreak = 0,
     this.vocabularyCount = 0,
     this.vocabularyDueCount = 0,
@@ -75,6 +75,8 @@ class HumaContext {
     this.storyCompletedToday = false,
     this.taskCount = 0,
     this.completedTaskCount = 0,
+    this.goals = const {},
+    this.interests = const {},
   });
 
   final HumaScreen screen;
@@ -87,6 +89,7 @@ class HumaContext {
   final int vocabularyCount, vocabularyDueCount;
   final String? newGrowthWord, newlyUnlockedWorldId, newlyUnlockedChapterId;
   final int taskCount, completedTaskCount;
+  final Set<String> goals, interests;
 
   HumaContext copyWith({
     HumaScreen? screen,
@@ -117,6 +120,8 @@ class HumaContext {
     storyCompletedToday: storyCompletedToday,
     taskCount: taskCount,
     completedTaskCount: completedTaskCount,
+    goals: goals,
+    interests: interests,
   );
 }
 

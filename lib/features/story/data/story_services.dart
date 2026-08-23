@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../progression/domain/again_progress.dart';
 import '../../progression/presentation/progression_controller.dart';
+import '../../voice/application/voice_providers.dart';
+import '../../voice/domain/voice_models.dart';
+import '../../voice/domain/voice_services.dart';
 
 abstract interface class StoryAudioService {
   Future<void> playPhrase(String phrase);
@@ -8,17 +11,50 @@ abstract interface class StoryAudioService {
   Future<void> replayPhrase(String phrase);
 }
 
-/// Development adapter until narrated audio assets are connected.
-class DevelopmentStoryAudioService implements StoryAudioService {
+class StoryAudioUnavailable implements Exception {
+  const StoryAudioUnavailable();
+}
+
+/// Honest default until a real narrated-audio or TTS adapter is connected.
+class UnconfiguredStoryAudioService implements StoryAudioService {
   @override
-  Future<void> playPhrase(String phrase) =>
-      Future<void>.delayed(const Duration(milliseconds: 850));
+  Future<void> playPhrase(String phrase) async {
+    throw const StoryAudioUnavailable();
+  }
 
   @override
   Future<void> pause() async {}
 
   @override
   Future<void> replayPhrase(String phrase) => playPhrase(phrase);
+}
+
+class TtsStoryAudioService implements StoryAudioService {
+  const TtsStoryAudioService(this.tts);
+  final TextToSpeechService tts;
+
+  @override
+  Future<void> playPhrase(String phrase) => tts.speak(
+    TextToSpeechRequest(
+      text: phrase,
+      locale: 'en-US',
+      speed: EducationalSpeechSpeed.normal,
+      purpose: TextToSpeechPurpose.storyNarration,
+    ),
+  );
+
+  @override
+  Future<void> pause() => tts.stop();
+
+  @override
+  Future<void> replayPhrase(String phrase) => tts.speak(
+    TextToSpeechRequest(
+      text: phrase,
+      locale: 'en-US',
+      speed: EducationalSpeechSpeed.normal,
+      purpose: TextToSpeechPurpose.sentenceReplay,
+    ),
+  );
 }
 
 abstract interface class StoryProgressRepository {
@@ -30,6 +66,10 @@ abstract interface class StoryProgressRepository {
     required String chapterId,
     required int minutes,
     required int xp,
+    String? storyId,
+    String? worldId,
+    String? nextChapterId,
+    int seedGrowth = 1,
   });
   Future<void> completeVocabularyReview();
   Future<void> claimDailyReward({
@@ -90,23 +130,45 @@ class ProgressionStoryProgressRepository implements StoryProgressRepository {
     required String chapterId,
     required int minutes,
     required int xp,
+    String? storyId,
+    String? worldId,
+    String? nextChapterId,
+    int seedGrowth = 1,
   }) => ref
       .read(progressionProvider.notifier)
       .record(
         LearningEvent.storyCompleted(
-          storyId: chapterId,
+          storyId: storyId ?? chapterId,
           chapterId: chapterId,
-          worldId: chapterId == 'hava-durumu'
-              ? 'deniz-kralligi'
-              : 'yasam-vadisi',
+          worldId:
+              worldId ??
+              switch (chapterId) {
+                'ormana-giris' ||
+                'kaybolan-yol' ||
+                'gece-sesleri' => 'sessiz-orman',
+                'duygular' ||
+                'hava-durumu' ||
+                'ulasim-araclari' ||
+                'yolculuk-hazirligi' => 'deniz-kralligi',
+                _ => 'yasam-vadisi',
+              },
           minutes: minutes,
           xp: xp,
-          seedGrowth: 1,
-          nextChapterId: chapterId == 'first-encounter'
-              ? 'hava-durumu'
-              : chapterId == 'hava-durumu'
-              ? 'ulasim-araclari'
-              : null,
+          seedGrowth: seedGrowth,
+          nextChapterId:
+              nextChapterId ??
+              switch (chapterId) {
+                'first-encounter' => 'ben-kimim',
+                'ben-kimim' => 'gunluk-hayat',
+                'gunluk-hayat' => 'sevdigim-seyler',
+                'sevdigim-seyler' => 'kucuk-bir-gun',
+                'ormana-giris' => 'kaybolan-yol',
+                'kaybolan-yol' => 'gece-sesleri',
+                'duygular' => 'hava-durumu',
+                'hava-durumu' => 'ulasim-araclari',
+                'ulasim-araclari' => 'yolculuk-hazirligi',
+                _ => null,
+              },
         ),
       );
   @override
@@ -149,8 +211,16 @@ class ProgressionStoryProgressRepository implements StoryProgressRepository {
   }
 }
 
-final storyAudioServiceProvider = Provider<StoryAudioService>(
-  (ref) => DevelopmentStoryAudioService(),
+final storyAudioServiceProvider = Provider<StoryAudioService>((ref) {
+  final runtime = ref.watch(voicePlatformRuntimeProvider).value;
+  return runtime?.capabilities.textToSpeech == VoiceAvailability.available
+      ? TtsStoryAudioService(runtime!.textToSpeech)
+      : UnconfiguredStoryAudioService();
+});
+final storyAudioAvailabilityProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(voiceCapabilitiesProvider).textToSpeech ==
+      VoiceAvailability.available,
 );
 final storyProgressRepositoryProvider = Provider<StoryProgressRepository>(
   (ref) => ProgressionStoryProgressRepository(ref),

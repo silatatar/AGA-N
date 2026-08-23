@@ -47,6 +47,7 @@ class _FlutterSplashScreenState extends ConsumerState<FlutterSplashScreen>
       StartupDestination.profileName => AppRoutes.profileNamePath,
       StartupDestination.onboarding => AppRoutes.learningGoalPath,
       StartupDestination.accountDecision => AppRoutes.accountDecisionPath,
+      StartupDestination.emailVerification => AppRoutes.emailVerificationPath,
       StartupDestination.home => AppRoutes.homePath,
     });
   }

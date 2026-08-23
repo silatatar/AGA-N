@@ -102,6 +102,10 @@ class StorySessionController extends AsyncNotifier<StorySessionState> {
       chapterId: story.chapter.id,
       minutes: story.chapter.durationMinutes,
       xp: story.reward.xp,
+      storyId: story.id,
+      worldId: story.worldId,
+      nextChapterId: story.chapter.nextChapterId,
+      seedGrowth: story.reward.seedGrowth,
     );
     if (story.reward.seedGrowth > 0 && story.id == 'first-encounter') {
       await repository.awardFirstSeed();
