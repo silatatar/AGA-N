@@ -104,6 +104,24 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> signOut() async {}
 }
 
+void _configureCompletedLegacyOnboarding(
+  FakeLearnerPreferenceRepository learner,
+  FakeOnboardingRepository onboarding,
+) {
+  learner
+    ..stored = LearnerType.adult
+    ..profile = const LearnerProfile(
+      displayName: 'Aslı',
+      avatar: LearnerAvatar.huma,
+    );
+  onboarding.stored = const OnboardingPreferences(
+    goals: {'Seyahat etmek'},
+    level: EnglishLevel.beginner,
+    interests: {'Kültür'},
+    dailyMinutes: 10,
+  );
+}
+
 class FakeStoryAudioService implements StoryAudioService {
   int plays = 0;
   @override
@@ -313,6 +331,35 @@ void main() {
       progressionRepository,
     );
   }
+
+  test(
+    'completed legacy answers reconcile the canonical startup flag',
+    () async {
+      final learner = FakeLearnerPreferenceRepository();
+      final onboarding = FakeOnboardingRepository();
+      _configureCompletedLegacyOnboarding(learner, onboarding);
+      final startup = MemoryStartupRepository();
+      final container = ProviderContainer(
+        overrides: [
+          startupRepositoryProvider.overrideWithValue(startup),
+          dataOwnershipStoreProvider.overrideWithValue(
+            MemoryDataOwnershipStore(const DataOwner.guest('legacy-test')),
+          ),
+          learnerPreferenceRepositoryProvider.overrideWithValue(learner),
+          onboardingRepositoryProvider.overrideWithValue(onboarding),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(startupControllerProvider.future);
+      final destination = await container
+          .read(startupControllerProvider.notifier)
+          .decide();
+
+      expect(destination, StartupDestination.accountDecision);
+      expect(startup.value.onboardingComplete, isTrue);
+    },
+  );
 
   testWidgets('unavailable Hüma replay is disabled and truthful', (
     tester,

@@ -165,7 +165,7 @@ class StartupController extends AsyncNotifier<StartupState> {
   }
 
   Future<StartupDestination> decide() async {
-    final startup = state.value ?? await build();
+    var startup = state.value ?? await build();
     final learner = ref.read(learnerPreferenceRepositoryProvider);
     final type = await learner.readLearnerType();
     final profile = await learner.readProfile();
@@ -175,6 +175,10 @@ class StartupController extends AsyncNotifier<StartupState> {
         onboarding.level != null &&
         onboarding.interests.isNotEmpty &&
         onboarding.dailyMinutes != null;
+    if (!startup.onboardingComplete && answersComplete) {
+      startup = startup.copyWith(onboardingComplete: true);
+      await _save(startup);
+    }
     return decideStartup(
       hasLearnerType: type != null,
       hasProfile: profile != null,

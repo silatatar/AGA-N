@@ -85,6 +85,16 @@ abstract final class RouteAccessPolicy {
       );
     }
 
+    if (!snapshot.onboardingComplete &&
+        path == '/splash' &&
+        pendingLocation != null &&
+        publicOnboardingPaths.contains(pendingLocation)) {
+      return RouteAccessDecision(
+        redirect: pendingLocation,
+        pendingLocation: null,
+      );
+    }
+
     if (!snapshot.onboardingComplete) {
       return RouteAccessDecision(
         redirect: publicOnboardingPaths.contains(path) ? null : '/splash',

@@ -93,6 +93,21 @@ void main() {
       harness.dispose();
     });
 
+    testWidgets('loading resumes a safe onboarding destination when ready', (
+      tester,
+    ) async {
+      final harness = _RouterHarness(const RouterAccessSnapshot.loading());
+      await tester.pumpWidget(harness.app);
+      await _expectLocation(tester, harness, '/profile-name', '/splash');
+      harness.setSnapshot(
+        _ready(AuthStatus.unauthenticated, complete: false, owner: 'guest:g'),
+      );
+      await tester.pumpAndSettle();
+      expect(harness.location, '/profile-name');
+      expect(harness.bridge.pendingLocation, isNull);
+      harness.dispose();
+    });
+
     testWidgets('guest can use every offline-first product destination', (
       tester,
     ) async {
@@ -287,6 +302,7 @@ class _RouterHarness {
       routes: [
         for (final path in const [
           '/splash',
+          '/profile-name',
           '/home',
           '/world-map',
           '/story/:storyId',
