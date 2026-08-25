@@ -486,6 +486,7 @@ class _WorldNodeState extends State<_WorldNode> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -666,6 +667,7 @@ class _HumaGuide extends ConsumerWidget {
         child: SizedBox(
           width: math.min(MediaQuery.sizeOf(context).width * .48, 190),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Semantics(
                 image: true,

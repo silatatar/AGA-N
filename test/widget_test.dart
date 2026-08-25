@@ -427,7 +427,13 @@ void main() {
         await pumpApp(tester, size: size, route: AppRoutes.worldMapPath);
         await tester.pump(const Duration(milliseconds: 400));
         expect(find.text('Dünya Haritası'), findsOneWidget);
-        expect(find.byKey(const Key('world-yasam-vadisi')), findsOneWidget);
+        final valley = find.byKey(const Key('world-yasam-vadisi'));
+        expect(valley, findsOneWidget);
+        expect(
+          tester.getSize(valley).height,
+          lessThan(140),
+          reason: 'World node must hug its content instead of map height.',
+        );
         expect(find.text('Harita'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
@@ -1631,5 +1637,13 @@ void main() {
 
     expect(find.text('404'), findsOneWidget);
     expect(find.text('Bu yol henüz açılmadı'), findsOneWidget);
+  });
+
+  testWidgets('invalid story id shows branded not found', (tester) async {
+    await pumpApp(tester, route: '/story/not-a-story');
+
+    expect(find.text('404'), findsOneWidget);
+    expect(find.text('Bu yol henüz açılmadı'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

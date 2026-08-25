@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/widgets/state_views.dart';
 import '../../features/design_system/presentation/design_system_preview_screen.dart';
 import '../../features/atlas/presentation/atlas_screen.dart';
 import '../../features/conversation/presentation/huma_conversation_screen.dart';
@@ -13,6 +15,8 @@ import '../../features/home/presentation/home_dashboard_screen.dart';
 import '../../features/learner_profile/presentation/learner_profile_selection_screen.dart';
 import '../../features/learner_profile/presentation/profile_name_setup_screen.dart';
 import '../../features/onboarding/presentation/personalised_onboarding_screen.dart';
+import '../../features/story/data/story_repository.dart';
+import '../../features/story/domain/story_definition.dart';
 import '../../features/story/presentation/data_driven_story_player_screen.dart';
 import '../../features/story/presentation/story_entry_gate.dart';
 import '../../features/story_square/presentation/story_square_screen.dart';
@@ -254,9 +258,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         name: AppRoutes.story,
         path: AppRoutes.storyPath,
-        builder: (context, state) => DataDrivenStoryPlayerScreen(
-          storyId: state.pathParameters['storyId'] ?? '',
-        ),
+        builder: (context, state) =>
+            _StoryRouteScreen(storyId: state.pathParameters['storyId'] ?? ''),
       ),
       GoRoute(
         name: AppRoutes.worldMap,
@@ -293,6 +296,39 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) => const NotFoundScreen(),
   );
 });
+
+class _StoryRouteScreen extends ConsumerStatefulWidget {
+  const _StoryRouteScreen({required this.storyId});
+
+  final String storyId;
+
+  @override
+  ConsumerState<_StoryRouteScreen> createState() => _StoryRouteScreenState();
+}
+
+class _StoryRouteScreenState extends ConsumerState<_StoryRouteScreen> {
+  late final Future<StoryDefinition?> _story;
+
+  @override
+  void initState() {
+    super.initState();
+    _story = ref.read(storyRepositoryProvider).getStory(widget.storyId);
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<StoryDefinition?>(
+    future: _story,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return const Scaffold(body: LoadingView());
+      }
+      if (snapshot.hasError || snapshot.data == null) {
+        return const NotFoundScreen();
+      }
+      return DataDrivenStoryPlayerScreen(storyId: widget.storyId);
+    },
+  );
+}
 
 /// Exactly one controlled reactive bridge refreshes GoRouter. Equal snapshots
 /// do not churn the router or create redirect loops.
