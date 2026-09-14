@@ -1,6 +1,6 @@
 # AGAIN — Project Handoff and Recovery Guide
 
-Last updated: 2026-08-23 (Europe/Istanbul)
+Last updated: 2026-09-14 (Europe/Istanbul)
 
 This file is the canonical handoff for a new Codex/ChatGPT conversation or a new development machine. Read it together with the phase reports under `docs/` before changing production code.
 
@@ -19,6 +19,16 @@ Hüma is the living guide character. The canonical Hüma image is `assets/images
 - Backup SHA-256: `D88E1E1425AD165FCFD374DF808F1DD87A92575E6EC73B8E7FB82A984DAAEEDE`
 
 The Git repository is the primary recovery mechanism after Phase 40. Never commit `.env` files, credentials, provider/API keys, service-role secrets, signing files, keystores, tokens, browser profiles, user data, `build/`, `.dart_tool/`, logs, SDK caches, or dated binary backups.
+
+The repository is proprietary; see `LICENSE`. CI runs `flutter pub get` → `dart format --set-exit-if-changed .` → `dart analyze lib test` → `flutter test --no-pub` on every push and PR to `master` (`.github/workflows/ci.yml`).
+
+## Product decisions (2026-09-13/14, confirmed by TATAR)
+
+- **Team:** TATAR is the sole developer, working with AI tools. Sprint pacing should assume no other engineer.
+- **Target audience for the current curriculum slice:** 13+/adult only (see rationale below); the architecture keeps supporting `child/teen/adult` policy tiers, but content production targets one segment for now. Child mode is v2.
+- **Freemium gate model (for the Sprint 1 entitlement field):** world-based access — e.g. World 1 (Yaşam Vadisi) free, subsequent worlds locked. No payment integration in this 3-month window; only the entitlement field and lock points are being prepared.
+- **Target market:** not Türkiye-only — international is in scope. This means the fake-localization debt (§4.4 below, ~874 hardcoded Turkish strings) cannot be deferred indefinitely and should be pulled earlier than originally planned.
+- **Still open, not yet decided (revisit before Sprint 3-4):** whether Hüma is narration/guide-only or a live AI chat partner as a core sell; whether voice/speaking practice is a core promise (goes into Sprint 3) or v2.
 
 ## Technology
 
@@ -114,6 +124,8 @@ See `docs/phase37_local_data_ownership.md` and `docs/data_privacy_model.md`.
 - Microphone and voice controls must reflect actual platform permission/capability states; no fake availability or success claims.
 - Real authentication, cloud success, physical microphone validation, signing, store setup and deployment are still external release conditions.
 
+`huma-chat`'s rate limiting and idempotency guard are now backed by `public.huma_request_log` (Postgres, RLS-scoped to `auth.uid()`), not process memory — see `supabase/migrations/202609140001_phase42_huma_request_log.sql`. This was fixed because Deno Deploy isolates are short-lived and multi-instance, so the previous in-memory `Map`s reset unpredictably and did not protect a retried request that landed on a different isolate. Apply the new migration before deploying the updated function. The change has not yet been type-checked with `deno check` or deployed to a live project — do that before it carries production traffic.
+
 Setup and architecture references:
 
 - `docs/backend_setup.md`
@@ -161,3 +173,12 @@ External requirements remain: real credentials/configuration, physical voice ver
 ## Recommended next action after recovery
 
 Verify that the Phase 40 checkpoint hash exists locally and on GitHub, run `git status`, read the latest `docs/phase*.md`, and continue only from the advisor-approved next objective. Do not restart the product from Phase 1 or rebuild already completed features.
+
+## Sprint 0 status (2026-09-14)
+
+- [x] Confirmed no unpushed local work exists — GitHub `master` is the only working copy; nothing to recover.
+- [x] `LICENSE` added (proprietary, all rights reserved).
+- [x] GitHub Actions CI added (`.github/workflows/ci.yml`): format → analyze → test on push/PR to `master`.
+- [x] `huma-chat` rate limiting/idempotency moved from in-memory `Map`s to Postgres (`public.huma_request_log`); migration not yet applied to a live Supabase project, function not yet redeployed.
+- [x] This file updated with the confirmed product decisions above.
+- [ ] Android runtime QA report (`docs/phase41_android_runtime_qa.md`) — blocked: needs a real-device test pass with reproduction steps and logcat output; not runnable from an environment without a connected Android device/toolchain.
